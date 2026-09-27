@@ -1,0 +1,19 @@
+{
+  "name": "task-manager-functions",
+  "description": "Secure backend for Task Manager",
+  "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.5.0",
+    "firebase-functions": "^6.4.0",
+    "nodemailer": "^7.0.6"
+  },
+  "private": true
+}
