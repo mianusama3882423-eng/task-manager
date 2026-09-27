@@ -1,7 +1,7 @@
 // ============================================================
 // TASK MANAGER
 // Main Application
-// Version 1.0.0
+// Version 1.0.2
 // ============================================================
 
 import {
@@ -13,11 +13,15 @@ import {
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  sendEmailVerification,
   signOut,
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  getAuth
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+import {
+  initializeApp
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 
 import {
   collection,
@@ -35,15 +39,50 @@ import {
 
 
 // ============================================================
+// SECONDARY FIREBASE APP
+// Used to create student accounts without logging admin out
+// ============================================================
+
+let secondaryApp = null;
+let secondaryAuth = null;
+
+try {
+
+  secondaryApp =
+    initializeApp(
+      app.options,
+      "TaskManagerSecondary"
+    );
+
+  secondaryAuth =
+    getAuth(secondaryApp);
+
+} catch (error) {
+
+  console.warn(
+    "Secondary Firebase app initialization:",
+    error
+  );
+
+}
+
+
+// ============================================================
 // APP STATE
 // ============================================================
 
 const state = {
+
   user: null,
+
   profile: null,
+
   users: [],
+
   tasks: [],
+
   currentPage: "dashboard"
+
 };
 
 
@@ -51,16 +90,29 @@ const state = {
 // DOM HELPERS
 // ============================================================
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) =>
+  document.getElementById(id);
+
 
 function show(id) {
+
   const el = $(id);
-  if (el) el.classList.remove("hidden");
+
+  if (el) {
+    el.classList.remove("hidden");
+  }
+
 }
 
+
 function hide(id) {
+
   const el = $(id);
-  if (el) el.classList.add("hidden");
+
+  if (el) {
+    el.classList.add("hidden");
+  }
+
 }
 
 
@@ -69,16 +121,25 @@ function hide(id) {
 // ============================================================
 
 function hideLoader() {
-  const loader = $("appLoader");
+
+  const loader =
+    $("appLoader");
 
   if (loader) {
+
     loader.style.opacity = "0";
-    loader.style.pointerEvents = "none";
+
+    loader.style.pointerEvents =
+      "none";
 
     setTimeout(() => {
+
       loader.remove();
+
     }, 250);
+
   }
+
 }
 
 
@@ -88,20 +149,40 @@ function hideLoader() {
 
 let toastTimer = null;
 
-function toast(message, type = "success") {
-  const box = $("toast");
-  const text = $("toastMessage");
-  const icon = $("toastIcon");
 
-  if (!box || !text) return;
+function toast(
+  message,
+  type = "success"
+) {
 
-  text.textContent = message;
+  const box =
+    $("toast");
+
+  const text =
+    $("toastMessage");
+
+  const icon =
+    $("toastIcon");
+
+
+  if (!box || !text) {
+    return;
+  }
+
+
+  text.textContent =
+    message;
+
 
   if (icon) {
+
     icon.textContent =
-      type === "error" ? "!" :
-      type === "warning" ? "!" :
-      "✓";
+      type === "error"
+        ? "!"
+        : type === "warning"
+        ? "!"
+        : "✓";
+
 
     icon.style.background =
       type === "error"
@@ -109,15 +190,25 @@ function toast(message, type = "success") {
         : type === "warning"
         ? "#f59e0b"
         : "#22c55e";
+
   }
+
 
   show("toast");
 
-  clearTimeout(toastTimer);
 
-  toastTimer = setTimeout(() => {
-    hide("toast");
-  }, 3500);
+  clearTimeout(
+    toastTimer
+  );
+
+
+  toastTimer =
+    setTimeout(() => {
+
+      hide("toast");
+
+    }, 3500);
+
 }
 
 
@@ -125,12 +216,23 @@ function toast(message, type = "success") {
 // FORM MESSAGE
 // ============================================================
 
-function message(id, text, type = "error") {
-  const el = $(id);
+function message(
+  id,
+  text,
+  type = "error"
+) {
 
-  if (!el) return;
+  const el =
+    $(id);
 
-  el.textContent = text;
+  if (!el) {
+    return;
+  }
+
+
+  el.textContent =
+    text;
+
 
   el.style.color =
     type === "success"
@@ -138,6 +240,7 @@ function message(id, text, type = "error") {
       : type === "warning"
       ? "#b45309"
       : "#dc2626";
+
 }
 
 
@@ -147,7 +250,9 @@ function message(id, text, type = "error") {
 
 function firebaseError(error) {
 
-  const code = error?.code || "";
+  const code =
+    error?.code || "";
+
 
   const errors = {
 
@@ -176,12 +281,26 @@ function firebaseError(error) {
       "Network error. Please check your internet connection.",
 
     "permission-denied":
-      "You do not have permission for this action."
+      "You do not have permission for this action.",
+
+    "auth/operation-not-allowed":
+      "Email and password authentication is not enabled.",
+
+    "auth/invalid-api-key":
+      "Firebase configuration is invalid.",
+
+    "failed-precondition":
+      "This operation needs additional Firebase configuration."
+
   };
 
-  return errors[code] ||
+
+  return (
+    errors[code] ||
     error?.message ||
-    "Something went wrong. Please try again.";
+    "Something went wrong. Please try again."
+  );
+
 }
 
 
@@ -190,19 +309,40 @@ function firebaseError(error) {
 // ============================================================
 
 function showLogin() {
+
   show("loginPanel");
+
   hide("registerPanel");
 
-  message("loginMessage", "");
-  message("registerMessage", "");
+  message(
+    "loginMessage",
+    ""
+  );
+
+  message(
+    "registerMessage",
+    ""
+  );
+
 }
 
+
 function showRegister() {
+
   hide("loginPanel");
+
   show("registerPanel");
 
-  message("loginMessage", "");
-  message("registerMessage", "");
+  message(
+    "loginMessage",
+    ""
+  );
+
+  message(
+    "registerMessage",
+    ""
+  );
+
 }
 
 
@@ -213,41 +353,60 @@ function showRegister() {
 function setupPasswordToggles() {
 
   document
-    .querySelectorAll(".password-toggle")
+    .querySelectorAll(
+      ".password-toggle"
+    )
     .forEach(button => {
 
-      button.addEventListener("click", () => {
+      button.addEventListener(
+        "click",
+        () => {
 
-        const target = $(button.dataset.target);
+          const target =
+            $(button.dataset.target);
 
-        if (!target) return;
 
-        if (target.type === "password") {
+          if (!target) {
+            return;
+          }
 
-          target.type = "text";
 
-          button.textContent = "🙈";
+          if (
+            target.type ===
+            "password"
+          ) {
 
-          button.setAttribute(
-            "aria-label",
-            "Hide password"
-          );
+            target.type =
+              "text";
 
-        } else {
+            button.textContent =
+              "🙈";
 
-          target.type = "password";
+            button.setAttribute(
+              "aria-label",
+              "Hide password"
+            );
 
-          button.textContent = "👁";
+          } else {
 
-          button.setAttribute(
-            "aria-label",
-            "Show password"
-          );
+            target.type =
+              "password";
+
+            button.textContent =
+              "👁";
+
+            button.setAttribute(
+              "aria-label",
+              "Show password"
+            );
+
+          }
+
         }
-
-      });
+      );
 
     });
+
 }
 
 
@@ -259,51 +418,81 @@ async function registerAdmin(event) {
 
   event.preventDefault();
 
+
   const name =
-    $("registerName")?.value.trim();
+    $("registerName")
+      ?.value
+      .trim();
+
 
   const email =
-    $("registerEmail")?.value.trim();
+    $("registerEmail")
+      ?.value
+      .trim();
+
 
   const password =
-    $("registerPassword")?.value;
+    $("registerPassword")
+      ?.value;
+
 
   const confirmPassword =
-    $("registerConfirmPassword")?.value;
+    $("registerConfirmPassword")
+      ?.value;
 
-  message("registerMessage", "");
+
+  message(
+    "registerMessage",
+    ""
+  );
+
 
   if (!name) {
+
     message(
       "registerMessage",
       "Please enter your full name."
     );
+
     return;
   }
 
+
   if (!email) {
+
     message(
       "registerMessage",
       "Please enter your email."
     );
+
     return;
   }
 
+
   if (password.length < 6) {
+
     message(
       "registerMessage",
       "Password must contain at least 6 characters."
     );
+
     return;
   }
 
-  if (password !== confirmPassword) {
+
+  if (
+    password !==
+    confirmPassword
+  ) {
+
     message(
       "registerMessage",
       "Passwords do not match."
     );
+
     return;
   }
+
 
   const button =
     event.submitter ||
@@ -311,10 +500,17 @@ async function registerAdmin(event) {
       "#registerForm button[type='submit']"
     );
 
+
   if (button) {
-    button.disabled = true;
-    button.textContent = "Creating Account...";
+
+    button.disabled =
+      true;
+
+    button.textContent =
+      "Creating Account...";
+
   }
+
 
   try {
 
@@ -325,64 +521,103 @@ async function registerAdmin(event) {
         password
       );
 
+
     const firebaseUser =
       credential.user;
+
 
     await updateProfile(
       firebaseUser,
       {
-        displayName: name
+        displayName:
+          name
       }
     );
+
 
     await setDoc(
-      doc(db, "users", firebaseUser.uid),
+      doc(
+        db,
+        "users",
+        firebaseUser.uid
+      ),
       {
-        uid: firebaseUser.uid,
+
+        uid:
+          firebaseUser.uid,
+
         name,
+
         email,
-        role: "admin",
-        active: true,
-        createdAt: serverTimestamp()
+
+        role:
+          "admin",
+
+        active:
+          true,
+
+        createdAt:
+          serverTimestamp()
+
       }
     );
 
-    await sendEmailVerification(
-      firebaseUser
-    );
 
     message(
       "registerMessage",
-      "Account created. A verification email has been sent to your email address.",
+      "Account created successfully. You can now sign in.",
       "success"
     );
+
 
     toast(
       "Admin account created successfully."
     );
 
-    $("registerForm").reset();
+
+    $("registerForm")
+      ?.reset();
+
+
+    await signOut(
+      auth
+    );
+
 
     setTimeout(() => {
+
       showLogin();
-    }, 1800);
+
+    }, 1000);
+
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     message(
       "registerMessage",
       firebaseError(error)
     );
 
+
   } finally {
 
     if (button) {
-      button.disabled = false;
-      button.textContent = "Create Account";
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        "Create Account";
+
     }
+
   }
+
 }
 
 
@@ -394,15 +629,28 @@ async function loginUser(event) {
 
   event.preventDefault();
 
+
   const email =
-    $("loginEmail")?.value.trim();
+    $("loginEmail")
+      ?.value
+      .trim();
+
 
   const password =
-    $("loginPassword")?.value;
+    $("loginPassword")
+      ?.value;
 
-  message("loginMessage", "");
 
-  if (!email || !password) {
+  message(
+    "loginMessage",
+    ""
+  );
+
+
+  if (
+    !email ||
+    !password
+  ) {
 
     message(
       "loginMessage",
@@ -412,60 +660,66 @@ async function loginUser(event) {
     return;
   }
 
+
   const button =
     event.submitter ||
     document.querySelector(
       "#loginForm button[type='submit']"
     );
 
+
   if (button) {
-    button.disabled = true;
-    button.textContent = "Signing In...";
+
+    button.disabled =
+      true;
+
+    button.textContent =
+      "Signing In...";
+
   }
+
 
   try {
 
-    const credential =
-      await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+    await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
 
-    const firebaseUser =
-      credential.user;
 
-    if (!firebaseUser.emailVerified) {
+    toast(
+      "Login successful."
+    );
 
-      await signOut(auth);
-
-      message(
-        "loginMessage",
-        "Please verify your email first. Check your inbox.",
-        "warning"
-      );
-
-      return;
-    }
-
-    toast("Login successful.");
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     message(
       "loginMessage",
       firebaseError(error)
     );
 
+
   } finally {
 
     if (button) {
-      button.disabled = false;
-      button.textContent = "Sign In";
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        "Sign In";
+
     }
+
   }
+
 }
 
 
@@ -473,30 +727,51 @@ async function loginUser(event) {
 // LOAD USER PROFILE
 // ============================================================
 
-async function loadProfile(firebaseUser) {
+async function loadProfile(
+  firebaseUser
+) {
 
   const ref =
-    doc(db, "users", firebaseUser.uid);
+    doc(
+      db,
+      "users",
+      firebaseUser.uid
+    );
+
 
   const snap =
     await getDoc(ref);
+
 
   if (!snap.exists()) {
 
     throw new Error(
       "Your account profile was not found in the database."
     );
+
   }
 
-  const data = snap.data();
 
-  state.user = firebaseUser;
+  const data =
+    snap.data();
+
+
+  state.user =
+    firebaseUser;
+
+
   state.profile = {
+
     ...data,
-    uid: firebaseUser.uid
+
+    uid:
+      firebaseUser.uid
+
   };
 
+
   return state.profile;
+
 }
 
 
@@ -504,39 +779,62 @@ async function loadProfile(firebaseUser) {
 // START APPLICATION
 // ============================================================
 
-async function startApplication(firebaseUser) {
+async function startApplication(
+  firebaseUser
+) {
 
   try {
 
-    await loadProfile(firebaseUser);
+    await loadProfile(
+      firebaseUser
+    );
+
 
     hide("authScreen");
+
     show("mainApp");
 
+
     updateUserInterface();
+
 
     await loadUsers();
 
     await loadTasks();
 
+
     updateDashboard();
 
-    showPage("dashboard");
+
+    showPage(
+      "dashboard"
+    );
+
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     toast(
       firebaseError(error),
       "error"
     );
 
-    await signOut(auth);
+
+    await signOut(
+      auth
+    );
+
 
     show("authScreen");
+
     hide("mainApp");
+
   }
+
 }
 
 
@@ -544,95 +842,151 @@ async function startApplication(firebaseUser) {
 // USER INTERFACE
 // ============================================================
 
-function initials(name = "User") {
+function initials(
+  name = "User"
+) {
 
   return name
     .trim()
     .split(/\s+/)
     .slice(0, 2)
-    .map(part => part[0]?.toUpperCase() || "")
-    .join("") || "U";
+    .map(
+      part =>
+        part[0]
+          ?.toUpperCase() ||
+        ""
+    )
+    .join("") ||
+    "U";
+
 }
 
 
 function updateUserInterface() {
 
-  const profile = state.profile;
+  const profile =
+    state.profile;
 
-  if (!profile) return;
+
+  if (!profile) {
+    return;
+  }
+
 
   const name =
     profile.name ||
     state.user?.displayName ||
     "User";
 
+
   const role =
     profile.role ||
     "user";
+
 
   const avatar =
     initials(name);
 
 
   if ($("headerUserName"))
-    $("headerUserName").textContent = name;
+    $("headerUserName")
+      .textContent =
+      name;
+
 
   if ($("headerUserRole"))
-    $("headerUserRole").textContent = role;
+    $("headerUserRole")
+      .textContent =
+      role;
+
 
   if ($("sidebarName"))
-    $("sidebarName").textContent = name;
+    $("sidebarName")
+      .textContent =
+      name;
+
 
   if ($("sidebarRole"))
-    $("sidebarRole").textContent = role;
+    $("sidebarRole")
+      .textContent =
+      role;
+
 
   if ($("sidebarAvatar"))
-    $("sidebarAvatar").textContent = avatar;
+    $("sidebarAvatar")
+      .textContent =
+      avatar;
+
 
   if ($("profileAvatar"))
-    $("profileAvatar").textContent = avatar;
+    $("profileAvatar")
+      .textContent =
+      avatar;
+
 
   if ($("profileName"))
-    $("profileName").textContent = name;
+    $("profileName")
+      .textContent =
+      name;
+
 
   if ($("profileNameDetail"))
-    $("profileNameDetail").textContent = name;
+    $("profileNameDetail")
+      .textContent =
+      name;
+
 
   if ($("profileEmail"))
-    $("profileEmail").textContent =
-      profile.email ||
-      state.user?.email ||
-      "—";
+    $("profileEmail")
+      .textContent =
+        profile.email ||
+        state.user?.email ||
+        "—";
+
 
   if ($("profileRole"))
-    $("profileRole").textContent = role;
+    $("profileRole")
+      .textContent =
+      role;
+
 
   if ($("profileRoleDetail"))
-    $("profileRoleDetail").textContent = role;
+    $("profileRoleDetail")
+      .textContent =
+      role;
+
 
   if ($("profileStatus"))
-    $("profileStatus").textContent =
-      profile.active === false
-        ? "Inactive"
-        : "Active";
+    $("profileStatus")
+      .textContent =
+        profile.active === false
+          ? "Inactive"
+          : "Active";
 
 
   const isAdmin =
     role === "admin" ||
     role === "superadmin";
 
-  const isSuperAdmin =
-    role === "superadmin";
-
 
   document
-    .querySelectorAll(".admin-only")
+    .querySelectorAll(
+      ".admin-only"
+    )
     .forEach(el => {
 
       if (isAdmin) {
-        el.classList.remove("hidden");
+
+        el.classList.remove(
+          "hidden"
+        );
+
       } else {
-        el.classList.add("hidden");
+
+        el.classList.add(
+          "hidden"
+        );
+
       }
 
     });
@@ -645,6 +999,7 @@ function updateUserInterface() {
         "hidden",
         !isAdmin
       );
+
   }
 
 
@@ -655,6 +1010,7 @@ function updateUserInterface() {
         "hidden",
         !isAdmin
       );
+
   }
 
 
@@ -665,14 +1021,20 @@ function updateUserInterface() {
         "hidden",
         !isAdmin
       );
+
   }
 
 
-  if (!isSuperAdmin) {
+  if ($("addTaskBtn")) {
 
-    // Normal admins only see their own users/tasks.
-    // Students see only their own tasks.
+    $("addTaskBtn")
+      .classList.toggle(
+        "hidden",
+        !isAdmin
+      );
+
   }
+
 }
 
 
@@ -683,62 +1045,127 @@ function updateUserInterface() {
 function showPage(page) {
 
   const pages = [
+
     "dashboard",
+
     "users",
+
     "tasks",
+
     "progress",
+
     "profile"
+
   ];
 
-  pages.forEach(name => {
 
-    const pageElement =
-      $(`${name}Page`);
+  pages.forEach(
+    name => {
 
-    if (!pageElement) return;
+      const pageElement =
+        $(`${name}Page`);
 
-    if (name === page) {
-      pageElement.classList.remove("hidden");
-      pageElement.classList.add("active-page");
-    } else {
-      pageElement.classList.add("hidden");
-      pageElement.classList.remove("active-page");
+
+      if (!pageElement) {
+        return;
+      }
+
+
+      if (
+        name === page
+      ) {
+
+        pageElement
+          .classList
+          .remove("hidden");
+
+        pageElement
+          .classList
+          .add(
+            "active-page"
+          );
+
+      } else {
+
+        pageElement
+          .classList
+          .add("hidden");
+
+        pageElement
+          .classList
+          .remove(
+            "active-page"
+          );
+
+      }
+
     }
-  });
+  );
 
 
   document
-    .querySelectorAll(".nav-item")
-    .forEach(item => {
+    .querySelectorAll(
+      ".nav-item"
+    )
+    .forEach(
+      item => {
 
-      item.classList.toggle(
-        "active",
-        item.dataset.page === page
-      );
+        item.classList.toggle(
+          "active",
+          item.dataset.page ===
+            page
+        );
 
-    });
+      }
+    );
 
 
-  state.currentPage = page;
+  state.currentPage =
+    page;
+
 
   closeMobileSidebar();
 
 
-  if (page === "dashboard") {
+  if (
+    page ===
+    "dashboard"
+  ) {
+
     updateDashboard();
+
   }
 
-  if (page === "users") {
+
+  if (
+    page ===
+    "users"
+  ) {
+
     renderUsers();
+
   }
 
-  if (page === "tasks") {
+
+  if (
+    page ===
+    "tasks"
+  ) {
+
     renderTasks();
+
   }
 
-  if (page === "progress") {
+
+  if (
+    page ===
+    "progress"
+  ) {
+
     renderProgress();
+
   }
+
 }
 
 
@@ -748,53 +1175,144 @@ function showPage(page) {
 
 async function loadUsers() {
 
-  if (!state.profile) return;
+  if (!state.profile) {
+    return;
+  }
 
-  const role = state.profile.role;
+
+  const role =
+    state.profile.role;
+
 
   try {
 
     let q;
 
-    if (role === "superadmin") {
 
-      q = query(
-        collection(db, "users"),
-        where("role", "==", "student")
-      );
+    if (
+      role ===
+      "superadmin"
+    ) {
 
-    } else if (role === "admin") {
+      // Super Admin sees ALL users.
+      q =
+        query(
+          collection(
+            db,
+            "users"
+          )
+        );
 
-      q = query(
-        collection(db, "users"),
-        where("role", "==", "student"),
-        where(
-          "createdBy",
-          "==",
-          state.user.uid
-        )
-      );
+
+    } else if (
+      role ===
+      "admin"
+    ) {
+
+      // Normal Admin sees only
+      // students created by this admin.
+      q =
+        query(
+          collection(
+            db,
+            "users"
+          ),
+          where(
+            "role",
+            "==",
+            "student"
+          ),
+          where(
+            "createdBy",
+            "==",
+            state.user.uid
+          )
+        );
+
 
     } else {
 
-      state.users = [];
+      state.users =
+        [];
+
       return;
+
     }
 
-    const snap = await getDocs(q);
+
+    const snap =
+      await getDocs(q);
+
 
     state.users =
-      snap.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
+      snap.docs.map(
+        docSnap => ({
+
+          id:
+            docSnap.id,
+
+          ...docSnap.data()
+
+        })
+      );
+
+
+    // Put admins first for Super Admin.
+    state.users.sort(
+      (a, b) => {
+
+        if (
+          a.role ===
+          b.role
+        ) {
+          return (
+            (a.name || "")
+              .localeCompare(
+                b.name || ""
+              )
+          );
+        }
+
+        if (
+          a.role ===
+          "superadmin"
+        ) {
+          return -1;
+        }
+
+        if (
+          b.role ===
+          "superadmin"
+        ) {
+          return 1;
+        }
+
+        if (
+          a.role ===
+          "admin"
+        ) {
+          return -1;
+        }
+
+        return 1;
+
+      }
+    );
+
 
   } catch (error) {
 
-    console.error("Users error:", error);
+    console.error(
+      "Users error:",
+      error
+    );
 
-    state.users = [];
+
+    state.users =
+      [];
+
   }
+
 }
 
 
@@ -804,65 +1322,119 @@ async function loadUsers() {
 
 async function loadTasks() {
 
-  if (!state.profile) return;
+  if (!state.profile) {
+    return;
+  }
+
 
   const role =
     state.profile.role;
+
 
   try {
 
     let q;
 
-    if (role === "superadmin") {
 
-      q = query(
-        collection(db, "tasks"),
-        orderBy("assignedAt", "desc")
-      );
+    if (
+      role ===
+      "superadmin"
+    ) {
 
-    } else if (role === "admin") {
+      // Super Admin sees every task.
+      q =
+        query(
+          collection(
+            db,
+            "tasks"
+          ),
+          orderBy(
+            "assignedAt",
+            "desc"
+          )
+        );
 
-      q = query(
-        collection(db, "tasks"),
-        where(
-          "assignedBy",
-          "==",
-          state.user.uid
-        )
-      );
+
+    } else if (
+      role ===
+      "admin"
+    ) {
+
+      // Admin sees only own tasks.
+      q =
+        query(
+          collection(
+            db,
+            "tasks"
+          ),
+          where(
+            "assignedBy",
+            "==",
+            state.user.uid
+          )
+        );
+
 
     } else {
 
-      q = query(
-        collection(db, "tasks"),
-        where(
-          "assignedTo",
-          "==",
-          state.user.uid
-        )
-      );
+      // Student sees only assigned tasks.
+      q =
+        query(
+          collection(
+            db,
+            "tasks"
+          ),
+          where(
+            "assignedTo",
+            "==",
+            state.user.uid
+          )
+        );
+
     }
 
-    const snap = await getDocs(q);
+
+    const snap =
+      await getDocs(q);
+
 
     state.tasks =
-      snap.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
+      snap.docs.map(
+        docSnap => ({
+
+          id:
+            docSnap.id,
+
+          ...docSnap.data()
+
+        })
+      );
+
 
     state.tasks.sort(
       (a, b) =>
-        timestampValue(b.assignedAt) -
-        timestampValue(a.assignedAt)
+        timestampValue(
+          b.assignedAt
+        ) -
+        timestampValue(
+          a.assignedAt
+        )
     );
+
 
   } catch (error) {
 
-    console.error("Tasks error:", error);
+    console.error(
+      "Tasks error:",
+      error
+    );
 
-    state.tasks = [];
+
+    state.tasks =
+      [];
+
   }
+
 }
 
 
@@ -870,79 +1442,139 @@ async function loadTasks() {
 // TIMESTAMP HELPERS
 // ============================================================
 
-function timestampValue(timestamp) {
+function timestampValue(
+  timestamp
+) {
 
-  if (!timestamp) return 0;
+  if (!timestamp) {
+    return 0;
+  }
+
 
   if (
-    typeof timestamp.toMillis === "function"
+    typeof timestamp.toMillis ===
+    "function"
   ) {
+
     return timestamp.toMillis();
+
   }
+
 
   if (
-    timestamp.seconds !== undefined
+    timestamp.seconds !==
+    undefined
   ) {
-    return timestamp.seconds * 1000;
+
+    return (
+      timestamp.seconds *
+      1000
+    );
+
   }
 
-  if (timestamp instanceof Date) {
+
+  if (
+    timestamp instanceof Date
+  ) {
+
     return timestamp.getTime();
+
   }
+
 
   return 0;
+
 }
 
 
-function formatDate(timestamp) {
+function formatDate(
+  timestamp
+) {
 
   const value =
-    timestampValue(timestamp);
-
-  if (!value) return "—";
-
-  return new Date(value)
-    .toLocaleString(
-      undefined,
-      {
-        dateStyle: "medium",
-        timeStyle: "short"
-      }
+    timestampValue(
+      timestamp
     );
-}
 
 
-function formatDuration(ms) {
-
-  if (!ms || ms < 0) {
+  if (!value) {
     return "—";
   }
 
+
+  return new Date(
+    value
+  ).toLocaleString(
+    undefined,
+    {
+      dateStyle:
+        "medium",
+      timeStyle:
+        "short"
+    }
+  );
+
+}
+
+
+function formatDuration(
+  ms
+) {
+
+  if (
+    !ms ||
+    ms < 0
+  ) {
+
+    return "—";
+
+  }
+
+
   const totalSeconds =
-    Math.floor(ms / 1000);
+    Math.floor(
+      ms / 1000
+    );
+
 
   const hours =
-    Math.floor(totalSeconds / 3600);
+    Math.floor(
+      totalSeconds /
+      3600
+    );
+
 
   const minutes =
     Math.floor(
-      (totalSeconds % 3600) / 60
+      (
+        totalSeconds %
+        3600
+      ) / 60
     );
 
+
   const seconds =
-    totalSeconds % 60;
+    totalSeconds %
+    60;
+
 
   if (hours > 0) {
 
     return `${hours}h ${minutes}m`;
+
   }
+
 
   if (minutes > 0) {
 
     return `${minutes}m ${seconds}s`;
+
   }
 
+
   return `${seconds}s`;
+
 }
 
 
@@ -950,26 +1582,44 @@ function formatDuration(ms) {
 // STATUS HELPERS
 // ============================================================
 
-function statusLabel(status) {
+function statusLabel(
+  status
+) {
 
   const labels = {
 
-    pending: "Pending",
+    pending:
+      "Pending",
 
-    accepted: "Accepted",
+    accepted:
+      "Accepted",
 
-    in_progress: "In Progress",
+    in_progress:
+      "In Progress",
 
-    completed: "Completed"
+    completed:
+      "Completed"
+
   };
 
-  return labels[status] || "Pending";
+
+  return (
+    labels[status] ||
+    "Pending"
+  );
+
 }
 
 
-function statusClass(status) {
+function statusClass(
+  status
+) {
 
-  return `status-${status || "pending"}`;
+  return `status-${
+    status ||
+    "pending"
+  }`;
+
 }
 
 
@@ -977,17 +1627,24 @@ function statusClass(status) {
 // USER NAME
 // ============================================================
 
-function getUserName(uid) {
+function getUserName(
+  uid
+) {
 
   const user =
     state.users.find(
-      item => item.uid === uid ||
-              item.id === uid
+      item =>
+        item.uid === uid ||
+        item.id === uid
     );
 
-  return user?.name ||
+
+  return (
+    user?.name ||
     user?.email ||
-    "User";
+    "User"
+  );
+
 }
 
 
@@ -1000,37 +1657,59 @@ function updateDashboard() {
   const tasks =
     state.tasks || [];
 
+
   const total =
     tasks.length;
 
+
   const pending =
     tasks.filter(
-      t => (t.status || "pending") === "pending"
+      t =>
+        (
+          t.status ||
+          "pending"
+        ) ===
+        "pending"
     ).length;
+
 
   const inProgress =
     tasks.filter(
-      t => t.status === "in_progress"
+      t =>
+        t.status ===
+        "in_progress"
     ).length;
+
 
   const completed =
     tasks.filter(
-      t => t.status === "completed"
+      t =>
+        t.status ===
+        "completed"
     ).length;
 
 
   if ($("statTotalTasks"))
-    $("statTotalTasks").textContent = total;
+    $("statTotalTasks")
+      .textContent =
+      total;
+
 
   if ($("statPending"))
-    $("statPending").textContent = pending;
+    $("statPending")
+      .textContent =
+      pending;
+
 
   if ($("statInProgress"))
-    $("statInProgress").textContent =
+    $("statInProgress")
+      .textContent =
       inProgress;
 
+
   if ($("statCompleted"))
-    $("statCompleted").textContent =
+    $("statCompleted")
+      .textContent =
       completed;
 
 
@@ -1038,26 +1717,35 @@ function updateDashboard() {
     total === 0
       ? 0
       : Math.round(
-          (completed / total) * 100
+          (
+            completed /
+            total
+          ) * 100
         );
 
 
   if ($("overviewPercentage"))
-    $("overviewPercentage").textContent =
+    $("overviewPercentage")
+      .textContent =
       `${percentage}%`;
 
 
   if ($("overviewProgress")) {
 
-    $("overviewProgress").style.background =
+    $("overviewProgress")
+      .style.background =
       `conic-gradient(
-        #4f46e5 ${percentage * 3.6}deg,
-        #edf0f7 ${percentage * 3.6}deg
+        #4f46e5
+        ${percentage * 3.6}deg,
+        #edf0f7
+        ${percentage * 3.6}deg
       )`;
+
   }
 
 
   renderRecentTasks();
+
 }
 
 
@@ -1070,24 +1758,38 @@ function renderRecentTasks() {
   const container =
     $("recentTasksContainer");
 
-  if (!container) return;
 
-  const tasks =
-    state.tasks.slice(0, 6);
-
-  if (!tasks.length) {
-
-    container.innerHTML = emptyHTML(
-      "✓",
-      "No tasks yet",
-      "Tasks will appear here."
-    );
-
+  if (!container) {
     return;
   }
 
+
+  const tasks =
+    state.tasks.slice(
+      0,
+      6
+    );
+
+
+  if (!tasks.length) {
+
+    container.innerHTML =
+      emptyHTML(
+        "✓",
+        "No tasks yet",
+        "Tasks will appear here."
+      );
+
+    return;
+
+  }
+
+
   container.innerHTML =
-    tasks.map(taskHTML).join("");
+    tasks
+      .map(taskHTML)
+      .join("");
+
 }
 
 
@@ -1095,55 +1797,120 @@ function renderRecentTasks() {
 // TASK HTML
 // ============================================================
 
-function taskHTML(task) {
+function taskHTML(
+  task
+) {
 
   const status =
-    task.status || "pending";
+    task.status ||
+    "pending";
+
 
   const assignedTo =
-    getUserName(task.assignedTo);
+    getUserName(
+      task.assignedTo
+    );
+
 
   const duration =
     task.durationMs
-      ? formatDuration(task.durationMs)
+      ? formatDuration(
+          task.durationMs
+        )
       : "Not completed";
 
+
   return `
+
     <div class="task-item">
 
       <div class="task-main">
 
         <div class="task-title">
-          ${escapeHTML(task.title || "Untitled Task")}
+          ${escapeHTML(
+            task.title ||
+            "Untitled Task"
+          )}
         </div>
 
         <div class="task-description">
           ${escapeHTML(
-            task.description || "No description"
+            task.description ||
+            "No description"
           )}
         </div>
 
         <div class="task-meta">
 
           <span>
-            ${escapeHTML(assignedTo)}
+            ${escapeHTML(
+              assignedTo
+            )}
           </span>
 
           <span>•</span>
 
           <span>
-            Assigned ${escapeHTML(
-              formatDate(task.assignedAt)
+            Assigned
+            ${escapeHTML(
+              formatDate(
+                task.assignedAt
+              )
             )}
           </span>
+
+          ${
+            task.acceptedAt
+              ? `
+                <span>•</span>
+                <span>
+                  Accepted
+                  ${escapeHTML(
+                    formatDate(
+                      task.acceptedAt
+                    )
+                  )}
+                </span>
+              `
+              : ""
+          }
+
+          ${
+            task.startedAt
+              ? `
+                <span>•</span>
+                <span>
+                  Started
+                  ${escapeHTML(
+                    formatDate(
+                      task.startedAt
+                    )
+                  )}
+                </span>
+              `
+              : ""
+          }
 
           ${
             task.completedAt
               ? `
                 <span>•</span>
                 <span>
+                  Completed
+                  ${escapeHTML(
+                    formatDate(
+                      task.completedAt
+                    )
+                  )}
+                </span>
+
+                <span>•</span>
+
+                <span>
                   Duration:
-                  ${escapeHTML(duration)}
+                  ${escapeHTML(
+                    duration
+                  )}
                 </span>
               `
               : ""
@@ -1157,17 +1924,24 @@ function taskHTML(task) {
       <div class="task-actions">
 
         <span
-          class="status-badge ${statusClass(status)}"
+          class="
+            status-badge
+            ${statusClass(status)}
+          "
         >
           ${statusLabel(status)}
         </span>
 
-        ${taskActionButtons(task)}
+        ${taskActionButtons(
+          task
+        )}
 
       </div>
 
     </div>
+
   `;
+
 }
 
 
@@ -1175,62 +1949,94 @@ function taskHTML(task) {
 // TASK ACTION BUTTONS
 // ============================================================
 
-function taskActionButtons(task) {
+function taskActionButtons(
+  task
+) {
 
   const role =
     state.profile?.role;
 
+
   const status =
-    task.status || "pending";
+    task.status ||
+    "pending";
 
 
-  if (role === "student") {
+  if (
+    role !==
+    "student"
+  ) {
 
-    if (status === "pending") {
+    return "";
 
-      return `
-        <button
-          class="small-btn"
-          data-task-action="accept"
-          data-task-id="${task.id}"
-          type="button"
-        >
-          Accept
-        </button>
-      `;
-    }
+  }
 
-    if (status === "accepted") {
 
-      return `
-        <button
-          class="small-btn"
-          data-task-action="start"
-          data-task-id="${task.id}"
-          type="button"
-        >
-          Start
-        </button>
-      `;
-    }
+  if (
+    status ===
+    "pending"
+  ) {
 
-    if (status === "in_progress") {
+    return `
 
-      return `
-        <button
-          class="small-btn"
-          data-task-action="complete"
-          data-task-id="${task.id}"
-          type="button"
-        >
-          Complete
-        </button>
-      `;
-    }
+      <button
+        class="small-btn"
+        data-task-action="accept"
+        data-task-id="${task.id}"
+        type="button"
+      >
+        Accept
+      </button>
+
+    `;
+
+  }
+
+
+  if (
+    status ===
+    "accepted"
+  ) {
+
+    return `
+
+      <button
+        class="small-btn"
+        data-task-action="start"
+        data-task-id="${task.id}"
+        type="button"
+      >
+        Start
+      </button>
+
+    `;
+
+  }
+
+
+  if (
+    status ===
+    "in_progress"
+  ) {
+
+    return `
+
+      <button
+        class="small-btn"
+        data-task-action="complete"
+        data-task-id="${task.id}"
+        type="button"
+      >
+        Complete
+      </button>
+
+    `;
+
   }
 
 
   return "";
+
 }
 
 
@@ -1238,44 +2044,77 @@ function taskActionButtons(task) {
 // ACCEPT TASK
 // ============================================================
 
-async function acceptTask(taskId) {
+async function acceptTask(
+  taskId
+) {
 
   const task =
     state.tasks.find(
-      item => item.id === taskId
+      item =>
+        item.id ===
+        taskId
     );
 
-  if (!task) return;
+
+  if (!task) {
+    return;
+  }
+
 
   try {
 
     await updateDoc(
-      doc(db, "tasks", taskId),
+      doc(
+        db,
+        "tasks",
+        taskId
+      ),
       {
-        status: "accepted",
-        acceptedAt: serverTimestamp()
+
+        status:
+          "accepted",
+
+        acceptedAt:
+          serverTimestamp()
+
       }
     );
 
-    toast("Task accepted.");
+
+    toast(
+      "Task accepted."
+    );
+
 
     await loadTasks();
 
     updateDashboard();
 
-    if (state.currentPage === "tasks") {
+
+    if (
+      state.currentPage ===
+      "tasks"
+    ) {
+
       renderTasks();
+
     }
+
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     toast(
       firebaseError(error),
       "error"
     );
+
   }
+
 }
 
 
@@ -1283,44 +2122,77 @@ async function acceptTask(taskId) {
 // START TASK
 // ============================================================
 
-async function startTask(taskId) {
+async function startTask(
+  taskId
+) {
 
   const task =
     state.tasks.find(
-      item => item.id === taskId
+      item =>
+        item.id ===
+        taskId
     );
 
-  if (!task) return;
+
+  if (!task) {
+    return;
+  }
+
 
   try {
 
     await updateDoc(
-      doc(db, "tasks", taskId),
+      doc(
+        db,
+        "tasks",
+        taskId
+      ),
       {
-        status: "in_progress",
-        startedAt: serverTimestamp()
+
+        status:
+          "in_progress",
+
+        startedAt:
+          serverTimestamp()
+
       }
     );
 
-    toast("Task started.");
+
+    toast(
+      "Task started."
+    );
+
 
     await loadTasks();
 
     updateDashboard();
 
-    if (state.currentPage === "tasks") {
+
+    if (
+      state.currentPage ===
+      "tasks"
+    ) {
+
       renderTasks();
+
     }
+
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     toast(
       firebaseError(error),
       "error"
     );
+
   }
+
 }
 
 
@@ -1328,65 +2200,99 @@ async function startTask(taskId) {
 // COMPLETE TASK
 // ============================================================
 
-async function completeTask(taskId) {
+async function completeTask(
+  taskId
+) {
 
   const task =
     state.tasks.find(
-      item => item.id === taskId
+      item =>
+        item.id ===
+        taskId
     );
 
-  if (!task) return;
+
+  if (!task) {
+    return;
+  }
+
 
   try {
 
     const completedAt =
       Date.now();
 
+
     const startedAt =
-      timestampValue(task.startedAt);
+      timestampValue(
+        task.startedAt
+      );
+
 
     const durationMs =
       startedAt
         ? Math.max(
             0,
-            completedAt - startedAt
+            completedAt -
+            startedAt
           )
         : 0;
 
 
     await updateDoc(
-      doc(db, "tasks", taskId),
+      doc(
+        db,
+        "tasks",
+        taskId
+      ),
       {
-        status: "completed",
+
+        status:
+          "completed",
 
         completedAt:
           serverTimestamp(),
 
         durationMs
+
       }
     );
+
 
     toast(
       "Task completed successfully."
     );
 
+
     await loadTasks();
 
     updateDashboard();
 
-    if (state.currentPage === "tasks") {
+
+    if (
+      state.currentPage ===
+      "tasks"
+    ) {
+
       renderTasks();
+
     }
+
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     toast(
       firebaseError(error),
       "error"
     );
+
   }
+
 }
 
 
@@ -1399,61 +2305,95 @@ function renderTasks() {
   const container =
     $("allTasksContainer");
 
-  if (!container) return;
+
+  if (!container) {
+    return;
+  }
+
 
   const search =
-    $("taskSearch")?.value
+    $("taskSearch")
+      ?.value
       .trim()
-      .toLowerCase() || "";
+      .toLowerCase() ||
+    "";
+
 
   const filter =
-    $("taskStatusFilter")?.value ||
+    $("taskStatusFilter")
+      ?.value ||
     "all";
 
 
   let tasks =
-    [...state.tasks];
+    [
+      ...state.tasks
+    ];
 
 
   if (search) {
 
     tasks =
-      tasks.filter(task => {
+      tasks.filter(
+        task => {
 
-        const text =
-          `${task.title || ""} ${
-            task.description || ""
-          }`.toLowerCase();
+          const text =
+            `${
+              task.title ||
+              ""
+            } ${
+              task.description ||
+              ""
+            }`.toLowerCase();
 
-        return text.includes(search);
-      });
+
+          return text.includes(
+            search
+          );
+
+        }
+      );
+
   }
 
 
-  if (filter !== "all") {
+  if (
+    filter !==
+    "all"
+  ) {
 
     tasks =
       tasks.filter(
         task =>
-          (task.status || "pending") === filter
+          (
+            task.status ||
+            "pending"
+          ) ===
+          filter
       );
+
   }
 
 
   if (!tasks.length) {
 
-    container.innerHTML = emptyHTML(
-      "✓",
-      "No tasks found",
-      "There are no tasks matching your search."
-    );
+    container.innerHTML =
+      emptyHTML(
+        "✓",
+        "No tasks found",
+        "There are no tasks matching your search."
+      );
 
     return;
+
   }
 
 
   container.innerHTML =
-    tasks.map(taskHTML).join("");
+    tasks
+      .map(taskHTML)
+      .join("");
+
 }
 
 
@@ -1466,164 +2406,208 @@ function renderUsers() {
   const container =
     $("usersContainer");
 
-  if (!container) return;
+
+  if (!container) {
+    return;
+  }
 
 
   if (!state.users.length) {
 
     container.innerHTML = `
+
       <div class="empty-state full-width">
 
         <div class="empty-icon">
           👥
         </div>
 
-        <h4>No users found</h4>
+        <h4>
+          No users found
+        </h4>
 
         <p>
           Create your first user to assign tasks.
         </p>
 
       </div>
+
     `;
 
     return;
+
   }
 
 
   container.innerHTML =
     state.users
-      .map(user => {
+      .map(
+        user => {
 
-        const userTasks =
-          state.tasks.filter(
-            task =>
-              task.assignedTo === user.uid
-          );
-
-        const total =
-          userTasks.length;
-
-        const completed =
-          userTasks.filter(
-            task =>
-              task.status === "completed"
-          ).length;
-
-        const progress =
-          total
-            ? Math.round(
-                (completed / total) * 100
-              )
-            : 0;
+          const userTasks =
+            state.tasks.filter(
+              task =>
+                task.assignedTo ===
+                user.uid
+            );
 
 
-        return `
-          <div class="user-card">
+          const total =
+            userTasks.length;
 
-            <div class="user-card-top">
 
-              <div class="user-card-avatar">
-                ${escapeHTML(
-                  initials(
-                    user.name ||
-                    user.email ||
-                    "U"
-                  )
-                )}
-              </div>
+          const completed =
+            userTasks.filter(
+              task =>
+                task.status ===
+                "completed"
+            ).length;
 
-              <div class="user-card-name">
 
-                <strong>
+          const progress =
+            total
+              ? Math.round(
+                  (
+                    completed /
+                    total
+                  ) * 100
+                )
+              : 0;
+
+
+          const roleLabel =
+            user.role ===
+            "superadmin"
+              ? "Super Admin"
+              : user.role ===
+                "admin"
+              ? "Admin"
+              : "Student";
+
+
+          return `
+
+            <div class="user-card">
+
+              <div class="user-card-top">
+
+                <div class="user-card-avatar">
                   ${escapeHTML(
-                    user.name ||
-                    "Unnamed User"
+                    initials(
+                      user.name ||
+                      user.email ||
+                      "U"
+                    )
                   )}
-                </strong>
-
-                <span>
-                  ${escapeHTML(
-                    user.email ||
-                    "No email"
-                  )}
-                </span>
-
-              </div>
-
-            </div>
+                </div>
 
 
-            <div class="user-card-stats">
+                <div class="user-card-name">
 
-              <div class="user-mini-stat">
+                  <strong>
+                    ${escapeHTML(
+                      user.name ||
+                      "Unnamed User"
+                    )}
+                  </strong>
 
-                <strong>
-                  ${total}
-                </strong>
+                  <span>
+                    ${escapeHTML(
+                      user.email ||
+                      "No email"
+                    )}
+                  </span>
 
-                <span>
-                  Tasks
-                </span>
+                </div>
 
               </div>
 
 
-              <div class="user-mini-stat">
+              <div class="user-card-stats">
 
-                <strong>
-                  ${completed}
-                </strong>
+                <div class="user-mini-stat">
 
-                <span>
-                  Done
-                </span>
+                  <strong>
+                    ${total}
+                  </strong>
+
+                  <span>
+                    Tasks
+                  </span>
+
+                </div>
+
+
+                <div class="user-mini-stat">
+
+                  <strong>
+                    ${completed}
+                  </strong>
+
+                  <span>
+                    Done
+                  </span>
+
+                </div>
+
+
+                <div class="user-mini-stat">
+
+                  <strong>
+                    ${progress}%
+                  </strong>
+
+                  <span>
+                    Progress
+                  </span>
+
+                </div>
 
               </div>
 
 
-              <div class="user-mini-stat">
-
-                <strong>
-                  ${progress}%
-                </strong>
-
-                <span>
-                  Progress
-                </span>
-
-              </div>
-
-            </div>
-
-
-            <div class="user-card-footer">
-
-              <span class="status-badge status-completed">
-                ${
-                  user.active === false
-                    ? "Inactive"
-                    : "Active"
-                }
-              </span>
-
-              <span
-                style="
-                  color:#667085;
-                  font-size:10px;
-                  font-weight:600;
-                "
+              <div
+                class="user-card-footer"
               >
-                User Account
-              </span>
+
+                <span
+                  class="
+                    status-badge
+                    ${
+                      user.active === false
+                        ? "status-pending"
+                        : "status-completed"
+                    }
+                  "
+                >
+                  ${
+                    user.active === false
+                      ? "Inactive"
+                      : "Active"
+                  }
+                </span>
+
+
+                <span
+                  style="
+                    color:#667085;
+                    font-size:10px;
+                    font-weight:600;
+                  "
+                >
+                  ${roleLabel}
+                </span>
+
+              </div>
 
             </div>
 
-          </div>
-        `;
+          `;
 
-      })
+        }
+      )
       .join("");
+
 }
 
 
@@ -1636,115 +2620,437 @@ function renderProgress() {
   const container =
     $("progressSummary");
 
-  if (!container) return;
 
-
-  if (!state.users.length) {
-
-    container.innerHTML = emptyHTML(
-      "▥",
-      "No progress data",
-      "Create users and assign tasks to see progress."
-    );
-
+  if (!container) {
     return;
   }
 
 
-  container.innerHTML =
-    state.users
-      .map(user => {
+  const students =
+    state.users.filter(
+      user =>
+        user.role ===
+        "student"
+    );
+
+
+  if (!students.length) {
+
+    container.innerHTML =
+      emptyHTML(
+        "▥",
+        "No progress data",
+        "Create users and assign tasks to see progress."
+      );
+
+    return;
+
+  }
+
+
+  const progressData =
+    students.map(
+      user => {
 
         const tasks =
           state.tasks.filter(
             task =>
-              task.assignedTo === user.uid
+              task.assignedTo ===
+              user.uid
           );
+
 
         const total =
           tasks.length;
 
-        const completed =
+
+        const pending =
           tasks.filter(
             task =>
-              task.status === "completed"
+              (
+                task.status ||
+                "pending"
+              ) ===
+              "pending"
           ).length;
+
 
         const accepted =
           tasks.filter(
             task =>
-              task.status === "accepted"
+              task.status ===
+              "accepted"
           ).length;
+
 
         const inProgress =
           tasks.filter(
             task =>
-              task.status === "in_progress"
+              task.status ===
+              "in_progress"
           ).length;
+
+
+        const completed =
+          tasks.filter(
+            task =>
+              task.status ===
+              "completed"
+          ).length;
+
 
         const percentage =
           total
             ? Math.round(
-                (completed / total) * 100
+                (
+                  completed /
+                  total
+                ) * 100
               )
             : 0;
 
 
-        return `
-          <div class="progress-user">
+        return {
 
-            <div class="progress-user-header">
+          user,
 
-              <span class="progress-user-name">
-                ${escapeHTML(
-                  user.name ||
-                  user.email ||
-                  "User"
-                )}
-              </span>
+          total,
 
-              <span class="progress-percentage">
-                ${percentage}%
-              </span>
+          pending,
 
-            </div>
+          accepted,
+
+          inProgress,
+
+          completed,
+
+          percentage
+
+        };
+
+      }
+    );
 
 
-            <div class="progress-bar">
+  // ==========================================================
+  // PROFESSIONAL PROGRESS GRAPH
+  // ==========================================================
+
+  const graphBars =
+    progressData
+      .map(
+        item => {
+
+          const graphHeight =
+            Math.max(
+              item.percentage,
+              4
+            );
+
+
+          return `
+
+            <div
+              style="
+                flex:1;
+                min-width:55px;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:flex-end;
+                height:220px;
+                position:relative;
+              "
+            >
 
               <div
-                class="progress-bar-fill"
-                style="width:${percentage}%"
+                style="
+                  font-size:12px;
+                  font-weight:800;
+                  color:#4f46e5;
+                  margin-bottom:6px;
+                "
+              >
+                ${item.percentage}%
+              </div>
+
+
+              <div
+                title="${
+                  escapeHTML(
+                    item.user.name ||
+                    item.user.email ||
+                    "Student"
+                  )
+                }: ${
+                  item.percentage
+                }%"
+                style="
+                  width:70%;
+                  max-width:58px;
+                  height:${graphHeight * 1.55}px;
+                  max-height:155px;
+                  min-height:6px;
+                  border-radius:10px 10px 4px 4px;
+                  background:
+                    linear-gradient(
+                      180deg,
+                      #6366f1,
+                      #4f46e5
+                    );
+                  transition:height .35s ease;
+                  box-shadow:
+                    0 6px 14px
+                    rgba(79,70,229,.20);
+                "
               ></div>
 
+
+              <div
+                style="
+                  width:100%;
+                  margin-top:10px;
+                  text-align:center;
+                  font-size:10px;
+                  font-weight:700;
+                  color:#667085;
+                  overflow:hidden;
+                  text-overflow:ellipsis;
+                  white-space:nowrap;
+                  padding:0 4px;
+                "
+                title="${escapeHTML(
+                  item.user.name ||
+                  item.user.email ||
+                  "Student"
+                )}"
+              >
+                ${escapeHTML(
+                  item.user.name ||
+                  "Student"
+                )}
+              </div>
+
             </div>
 
+          `;
 
-            <div class="progress-user-meta">
-
-              <span>
-                ${completed} completed
-              </span>
-
-              <span>
-                ${inProgress} in progress
-              </span>
-
-              <span>
-                ${accepted} accepted
-              </span>
-
-              <span>
-                ${total} total
-              </span>
-
-            </div>
-
-          </div>
-        `;
-
-      })
+        }
+      )
       .join("");
+
+
+  // ==========================================================
+  // GRAPH + SUMMARY CARDS
+  // ==========================================================
+
+  container.innerHTML = `
+
+    <div
+      style="
+        width:100%;
+        margin-bottom:20px;
+        padding:20px;
+        border-radius:18px;
+        background:#ffffff;
+        border:1px solid #e8eaf1;
+        box-shadow:0 8px 24px rgba(16,24,40,.05);
+      "
+    >
+
+      <div
+        style="
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:12px;
+          margin-bottom:20px;
+          flex-wrap:wrap;
+        "
+      >
+
+        <div>
+
+          <h3
+            style="
+              margin:0;
+              color:#1d2939;
+              font-size:17px;
+              font-weight:800;
+            "
+          >
+            Student Progress Graph
+          </h3>
+
+          <p
+            style="
+              margin:5px 0 0;
+              color:#667085;
+              font-size:12px;
+            "
+          >
+            Completed tasks percentage for each student.
+          </p>
+
+        </div>
+
+
+        <div
+          style="
+            font-size:11px;
+            color:#667085;
+            font-weight:700;
+          "
+        >
+          ${students.length}
+          student${
+            students.length === 1
+              ? ""
+              : "s"
+          }
+        </div>
+
+      </div>
+
+
+      <div
+        style="
+          position:relative;
+          min-height:250px;
+          display:flex;
+          align-items:flex-end;
+          gap:12px;
+          overflow-x:auto;
+          padding:
+            25px
+            10px
+            5px;
+          border-radius:14px;
+          background:
+            repeating-linear-gradient(
+              to top,
+              #f4f5f9 0px,
+              #f4f5f9 1px,
+              transparent 1px,
+              transparent 50px
+            );
+        "
+      >
+
+        ${graphBars}
+
+      </div>
+
+    </div>
+
+
+    <div
+      style="
+        display:grid;
+        grid-template-columns:
+          repeat(
+            auto-fit,
+            minmax(210px,1fr)
+          );
+        gap:14px;
+      "
+    >
+
+      ${progressData
+        .map(
+          item => `
+
+            <div
+              class="progress-user"
+              style="
+                padding:17px;
+                border-radius:16px;
+                background:#fff;
+                border:1px solid #e8eaf1;
+                box-shadow:
+                  0 5px 18px
+                  rgba(16,24,40,.04);
+              "
+            >
+
+              <div
+                class="progress-user-header"
+              >
+
+                <span
+                  class="progress-user-name"
+                >
+                  ${escapeHTML(
+                    item.user.name ||
+                    item.user.email ||
+                    "User"
+                  )}
+                </span>
+
+                <span
+                  class="progress-percentage"
+                >
+                  ${item.percentage}%
+                </span>
+
+              </div>
+
+
+              <div
+                class="progress-bar"
+              >
+
+                <div
+                  class="progress-bar-fill"
+                  style="
+                    width:${item.percentage}%
+                  "
+                ></div>
+
+              </div>
+
+
+              <div
+                class="progress-user-meta"
+              >
+
+                <span>
+                  ${item.completed}
+                  completed
+                </span>
+
+                <span>
+                  ${item.inProgress}
+                  in progress
+                </span>
+
+                <span>
+                  ${item.accepted}
+                  accepted
+                </span>
+
+                <span>
+                  ${item.pending}
+                  pending
+                </span>
+
+                <span>
+                  ${item.total}
+                  total
+                </span>
+
+              </div>
+
+            </div>
+
+          `
+        )
+        .join("")}
+
+    </div>
+
+  `;
+
 }
 
 
@@ -1759,6 +3065,7 @@ function emptyHTML(
 ) {
 
   return `
+
     <div class="empty-state">
 
       <div class="empty-icon">
@@ -1770,11 +3077,15 @@ function emptyHTML(
       </h4>
 
       <p>
-        ${escapeHTML(description)}
+        ${escapeHTML(
+          description
+        )}
       </p>
 
     </div>
+
   `;
+
 }
 
 
@@ -1785,27 +3096,45 @@ function emptyHTML(
 function openUserModal() {
 
   if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
+    state.profile?.role !==
+      "admin" &&
+    state.profile?.role !==
+      "superadmin"
   ) {
+
     toast(
       "Only admins can create users.",
       "error"
     );
 
     return;
+
   }
 
-  show("userModal");
 
-  message("userMessage", "");
+  show(
+    "userModal"
+  );
 
-  $("userForm")?.reset();
+
+  message(
+    "userMessage",
+    ""
+  );
+
+
+  $("userForm")
+    ?.reset();
+
 }
 
 
 function closeUserModal() {
-  hide("userModal");
+
+  hide(
+    "userModal"
+  );
+
 }
 
 
@@ -1816,94 +3145,383 @@ function closeUserModal() {
 function openTaskModal() {
 
   if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
+    state.profile?.role !==
+      "admin" &&
+    state.profile?.role !==
+      "superadmin"
   ) {
+
     toast(
       "Only admins can assign tasks.",
       "error"
     );
 
     return;
+
   }
 
-  show("taskModal");
 
-  message("taskMessage", "");
+  show(
+    "taskModal"
+  );
 
-  $("taskForm")?.reset();
+
+  message(
+    "taskMessage",
+    ""
+  );
+
+
+  $("taskForm")
+    ?.reset();
+
 
   populateTaskUsers();
+
 }
 
 
 function closeTaskModal() {
-  hide("taskModal");
+
+  hide(
+    "taskModal"
+  );
+
 }
 
+
+// ============================================================
+// POPULATE TASK USERS
+// ============================================================
 
 function populateTaskUsers() {
 
   const select =
     $("taskUser");
 
-  if (!select) return;
+
+  if (!select) {
+    return;
+  }
+
 
   select.innerHTML = `
+
     <option value="">
       Select a user
     </option>
+
   `;
 
 
-  state.users.forEach(user => {
+  // Only students can receive tasks.
+  const students =
+    state.users.filter(
+      user =>
+        user.role ===
+        "student"
+    );
 
-    const option =
-      document.createElement("option");
 
-    option.value =
-      user.uid || user.id;
+  students.forEach(
+    user => {
 
-    option.textContent =
-      `${user.name || "User"} — ${
-        user.email || ""
-      }`;
+      const option =
+        document.createElement(
+          "option"
+        );
 
-    select.appendChild(option);
-  });
+
+      option.value =
+        user.uid ||
+        user.id;
+
+
+      option.textContent =
+        `${user.name || "User"} — ${
+          user.email || ""
+        }`;
+
+
+      select.appendChild(
+        option
+      );
+
+    }
+  );
+
 }
 
 
 // ============================================================
-// CREATE USER
+// CREATE USER / STUDENT
 // ============================================================
 
-async function createUser(event) {
+async function createUser(
+  event
+) {
 
   event.preventDefault();
 
-  /*
-    IMPORTANT:
-    Creating another Firebase Authentication user
-    must be done through a secure backend / Cloud Function.
 
-    This frontend does NOT create users directly because
-    doing so would log the admin out of their own account.
+  const role =
+    state.profile?.role;
 
-    The actual createStudent Cloud Function will be
-    connected in the backend setup step.
-  */
+
+  if (
+    role !== "admin" &&
+    role !== "superadmin"
+  ) {
+
+    message(
+      "userMessage",
+      "Only admins can create users."
+    );
+
+    return;
+
+  }
+
+
+  const name =
+    $("userName")
+      ?.value
+      .trim();
+
+
+  const email =
+    $("userEmail")
+      ?.value
+      .trim();
+
+
+  const password =
+    $("userPassword")
+      ?.value;
+
+
+  const confirmPassword =
+    $("userConfirmPassword")
+      ?.value;
+
 
   message(
     "userMessage",
-    "Secure user creation will be connected through the Firebase Cloud Function.",
-    "warning"
+    ""
   );
 
-  toast(
-    "Secure user creation backend is not deployed yet.",
-    "warning"
-  );
+
+  if (!name) {
+
+    message(
+      "userMessage",
+      "Please enter the user's name."
+    );
+
+    return;
+
+  }
+
+
+  if (!email) {
+
+    message(
+      "userMessage",
+      "Please enter the user's email."
+    );
+
+    return;
+
+  }
+
+
+  if (
+    !password ||
+    password.length < 6
+  ) {
+
+    message(
+      "userMessage",
+      "Password must contain at least 6 characters."
+    );
+
+    return;
+
+  }
+
+
+  if (
+    password !==
+    confirmPassword
+  ) {
+
+    message(
+      "userMessage",
+      "Passwords do not match."
+    );
+
+    return;
+
+  }
+
+
+  if (
+    !secondaryAuth
+  ) {
+
+    message(
+      "userMessage",
+      "Secure user creation is not available. Please refresh the page."
+    );
+
+    return;
+
+  }
+
+
+  const button =
+    event.submitter;
+
+
+  if (button) {
+
+    button.disabled =
+      true;
+
+    button.textContent =
+      "Creating User...";
+
+  }
+
+
+  try {
+
+    // Create Firebase Authentication
+    // account in the secondary app.
+    const credential =
+      await createUserWithEmailAndPassword(
+        secondaryAuth,
+        email,
+        password
+      );
+
+
+    const student =
+      credential.user;
+
+
+    await updateProfile(
+      student,
+      {
+        displayName:
+          name
+      }
+    );
+
+
+    // Create Firestore student profile.
+    await setDoc(
+      doc(
+        db,
+        "users",
+        student.uid
+      ),
+      {
+
+        uid:
+          student.uid,
+
+        name,
+
+        email,
+
+        role:
+          "student",
+
+        active:
+          true,
+
+        createdBy:
+          state.user.uid,
+
+        createdByName:
+          state.profile.name ||
+          state.user.displayName ||
+          "Admin",
+
+        createdAt:
+          serverTimestamp()
+
+      }
+    );
+
+
+    // Sign out only the secondary app.
+    await signOut(
+      secondaryAuth
+    );
+
+
+    message(
+      "userMessage",
+      "User created successfully.",
+      "success"
+    );
+
+
+    toast(
+      "Student account created successfully."
+    );
+
+
+    $("userForm")
+      ?.reset();
+
+
+    await loadUsers();
+
+
+    renderUsers();
+
+
+    populateTaskUsers();
+
+
+    setTimeout(() => {
+
+      closeUserModal();
+
+    }, 900);
+
+
+  } catch (error) {
+
+    console.error(
+      "Create user error:",
+      error
+    );
+
+
+    message(
+      "userMessage",
+      firebaseError(error)
+    );
+
+
+  } finally {
+
+    if (button) {
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        "Create User";
+
+    }
+
+  }
+
 }
 
 
@@ -1911,32 +3529,52 @@ async function createUser(event) {
 // CREATE TASK
 // ============================================================
 
-async function createTask(event) {
+async function createTask(
+  event
+) {
 
   event.preventDefault();
 
+
   if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
+    state.profile?.role !==
+      "admin" &&
+    state.profile?.role !==
+      "superadmin"
   ) {
+
     return;
+
   }
 
 
   const title =
-    $("taskTitle")?.value.trim();
+    $("taskTitle")
+      ?.value
+      .trim();
+
 
   const description =
-    $("taskDescription")?.value.trim();
+    $("taskDescription")
+      ?.value
+      .trim();
+
 
   const assignedTo =
-    $("taskUser")?.value;
+    $("taskUser")
+      ?.value;
+
 
   const dueDate =
-    $("taskDueDate")?.value || null;
+    $("taskDueDate")
+      ?.value ||
+    null;
 
 
-  message("taskMessage", "");
+  message(
+    "taskMessage",
+    ""
+  );
 
 
   if (!title) {
@@ -1947,6 +3585,7 @@ async function createTask(event) {
     );
 
     return;
+
   }
 
 
@@ -1958,6 +3597,7 @@ async function createTask(event) {
     );
 
     return;
+
   }
 
 
@@ -1969,23 +3609,43 @@ async function createTask(event) {
     );
 
     return;
+
   }
 
 
   const button =
     event.submitter;
 
+
   if (button) {
 
-    button.disabled = true;
-    button.textContent = "Assigning...";
+    button.disabled =
+      true;
+
+    button.textContent =
+      "Assigning...";
+
   }
 
 
   try {
 
+    const assignedStudent =
+      state.users.find(
+        user =>
+          (
+            user.uid ||
+            user.id
+          ) ===
+          assignedTo
+      );
+
+
     await addDoc(
-      collection(db, "tasks"),
+      collection(
+        db,
+        "tasks"
+      ),
       {
 
         title,
@@ -1993,6 +3653,11 @@ async function createTask(event) {
         description,
 
         assignedTo,
+
+        assignedToName:
+          assignedStudent?.name ||
+          assignedStudent?.email ||
+          "Student",
 
         assignedBy:
           state.user.uid,
@@ -2002,20 +3667,26 @@ async function createTask(event) {
           state.user.displayName ||
           "Admin",
 
-        status: "pending",
+        status:
+          "pending",
 
         dueDate,
 
         assignedAt:
           serverTimestamp(),
 
-        acceptedAt: null,
+        acceptedAt:
+          null,
 
-        startedAt: null,
+        startedAt:
+          null,
 
-        completedAt: null,
+        completedAt:
+          null,
 
-        durationMs: 0
+        durationMs:
+          0
+
       }
     );
 
@@ -2024,31 +3695,46 @@ async function createTask(event) {
       "Task assigned successfully."
     );
 
+
     closeTaskModal();
+
 
     await loadTasks();
 
+
     updateDashboard();
+
 
     renderTasks();
 
+
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      error
+    );
+
 
     message(
       "taskMessage",
       firebaseError(error)
     );
 
+
   } finally {
 
     if (button) {
 
-      button.disabled = false;
-      button.textContent = "Assign Task";
+      button.disabled =
+        false;
+
+      button.textContent =
+        "Assign Task";
+
     }
+
   }
+
 }
 
 
@@ -2064,11 +3750,13 @@ function setupTaskFilters() {
       renderTasks
     );
 
+
   $("taskStatusFilter")
     ?.addEventListener(
       "change",
       renderTasks
     );
+
 }
 
 
@@ -2079,20 +3767,28 @@ function setupTaskFilters() {
 function openMobileSidebar() {
 
   $("sidebar")
-    ?.classList.add("open");
+    ?.classList
+    .add("open");
+
 
   $("sidebarOverlay")
-    ?.classList.remove("hidden");
+    ?.classList
+    .remove("hidden");
+
 }
 
 
 function closeMobileSidebar() {
 
   $("sidebar")
-    ?.classList.remove("open");
+    ?.classList
+    .remove("open");
+
 
   $("sidebarOverlay")
-    ?.classList.add("hidden");
+    ?.classList
+    .add("hidden");
+
 }
 
 
@@ -2100,14 +3796,39 @@ function closeMobileSidebar() {
 // ESCAPE HTML
 // ============================================================
 
-function escapeHTML(value) {
+function escapeHTML(
+  value
+) {
 
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  return String(
+    value ?? ""
+  )
+
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
+
 }
 
 
@@ -2154,43 +3875,56 @@ function setupEvents() {
 
   // Navigation
   document
-    .querySelectorAll(".nav-item")
-    .forEach(item => {
+    .querySelectorAll(
+      ".nav-item"
+    )
+    .forEach(
+      item => {
 
-      item.addEventListener(
-        "click",
-        () => {
+        item.addEventListener(
+          "click",
+          () => {
 
-          const page =
-            item.dataset.page;
+            const page =
+              item.dataset.page;
 
-          if (page) {
-            showPage(page);
+
+            if (page) {
+
+              showPage(
+                page
+              );
+
+            }
+
           }
+        );
 
-        }
-      );
-
-    });
+      }
+    );
 
 
-  // Dashboard view all
+  // Dashboard buttons
   document
-    .querySelectorAll("[data-page-target]")
-    .forEach(button => {
+    .querySelectorAll(
+      "[data-page-target]"
+    )
+    .forEach(
+      button => {
 
-      button.addEventListener(
-        "click",
-        () => {
+        button.addEventListener(
+          "click",
+          () => {
 
-          showPage(
-            button.dataset.pageTarget
-          );
+            showPage(
+              button.dataset.pageTarget
+            );
 
-        }
-      );
+          }
+        );
 
-    });
+      }
+    );
 
 
   // Logout
@@ -2201,13 +3935,21 @@ function setupEvents() {
 
         try {
 
-          await signOut(auth);
+          await signOut(
+            auth
+          );
 
-          toast("Logged out successfully.");
+
+          toast(
+            "Logged out successfully."
+          );
+
 
         } catch (error) {
 
-          console.error(error);
+          console.error(
+            error
+          );
 
         }
 
@@ -2231,7 +3973,7 @@ function setupEvents() {
     );
 
 
-  // Forms
+  // User form
   $("userForm")
     ?.addEventListener(
       "submit",
@@ -2239,6 +3981,7 @@ function setupEvents() {
     );
 
 
+  // Task form
   $("taskForm")
     ?.addEventListener(
       "submit",
@@ -2248,42 +3991,59 @@ function setupEvents() {
 
   // Modal close buttons
   document
-    .querySelectorAll("[data-close-modal]")
-    .forEach(button => {
+    .querySelectorAll(
+      "[data-close-modal]"
+    )
+    .forEach(
+      button => {
 
-      button.addEventListener(
-        "click",
-        () => {
+        button.addEventListener(
+          "click",
+          () => {
 
-          const modalId =
-            button.dataset.closeModal;
-
-          hide(modalId);
-
-        }
-      );
-
-    });
+            const modalId =
+              button.dataset.closeModal;
 
 
-  // Click modal backdrop to close
+            hide(
+              modalId
+            );
+
+          }
+        );
+
+      }
+    );
+
+
+  // Modal backdrop
   document
-    .querySelectorAll(".modal-backdrop")
-    .forEach(backdrop => {
+    .querySelectorAll(
+      ".modal-backdrop"
+    )
+    .forEach(
+      backdrop => {
 
-      backdrop.addEventListener(
-        "click",
-        () => {
+        backdrop.addEventListener(
+          "click",
+          () => {
 
-          const modal =
-            backdrop.closest(".modal");
+            const modal =
+              backdrop.closest(
+                ".modal"
+              );
 
-          modal?.classList.add("hidden");
 
-        }
-      );
+            modal?.classList
+              .add(
+                "hidden"
+              );
 
-    });
+          }
+        );
+
+      }
+    );
 
 
   // Mobile menu
@@ -2315,27 +4075,58 @@ function setupEvents() {
           "[data-task-action]"
         );
 
-      if (!button) return;
+
+      if (!button) {
+        return;
+      }
+
 
       const action =
         button.dataset.taskAction;
 
+
       const taskId =
         button.dataset.taskId;
 
-      if (!taskId) return;
 
-
-      if (action === "accept") {
-        await acceptTask(taskId);
+      if (!taskId) {
+        return;
       }
 
-      if (action === "start") {
-        await startTask(taskId);
+
+      if (
+        action ===
+        "accept"
+      ) {
+
+        await acceptTask(
+          taskId
+        );
+
       }
 
-      if (action === "complete") {
-        await completeTask(taskId);
+
+      if (
+        action ===
+        "start"
+      ) {
+
+        await startTask(
+          taskId
+        );
+
+      }
+
+
+      if (
+        action ===
+        "complete"
+      ) {
+
+        await completeTask(
+          taskId
+        );
+
       }
 
     }
@@ -2362,17 +4153,32 @@ onAuthStateChanged(
 
       } else {
 
-        show("authScreen");
-        hide("mainApp");
+        show(
+          "authScreen"
+        );
+
+        hide(
+          "mainApp"
+        );
 
       }
 
+
     } catch (error) {
 
-      console.error(error);
+      console.error(
+        error
+      );
 
-      show("authScreen");
-      hide("mainApp");
+
+      show(
+        "authScreen"
+      );
+
+      hide(
+        "mainApp"
+      );
+
 
     } finally {
 
