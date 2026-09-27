@@ -1,7 +1,7 @@
 // ============================================================
 // TASK MANAGER
 // Main Application
-// Version 1.0.2
+// Version 1.0.3
 // ============================================================
 
 import {
@@ -40,7 +40,7 @@ import {
 
 // ============================================================
 // SECONDARY FIREBASE APP
-// Used to create student accounts without logging admin out
+// Used to create students without logging admin out
 // ============================================================
 
 let secondaryApp = null;
@@ -48,14 +48,14 @@ let secondaryAuth = null;
 
 try {
 
-  secondaryApp =
-    initializeApp(
-      app.options,
-      "TaskManagerSecondary"
-    );
+  secondaryApp = initializeApp(
+    app.options,
+    "TaskManagerSecondary"
+  );
 
-  secondaryAuth =
-    getAuth(secondaryApp);
+  secondaryAuth = getAuth(
+    secondaryApp
+  );
 
 } catch (error) {
 
@@ -68,7 +68,7 @@ try {
 
 
 // ============================================================
-// APP STATE
+// GLOBAL STATE
 // ============================================================
 
 const state = {
@@ -81,18 +81,24 @@ const state = {
 
   tasks: [],
 
-  currentPage: "dashboard"
+  currentPage: "dashboard",
+
+  selectedStudentId: null
 
 };
 
 
 // ============================================================
-// DOM HELPERS
+// SHORTCUT
 // ============================================================
 
 const $ = (id) =>
   document.getElementById(id);
 
+
+// ============================================================
+// SHOW / HIDE
+// ============================================================
 
 function show(id) {
 
@@ -125,20 +131,20 @@ function hideLoader() {
   const loader =
     $("appLoader");
 
-  if (loader) {
-
-    loader.style.opacity = "0";
-
-    loader.style.pointerEvents =
-      "none";
-
-    setTimeout(() => {
-
-      loader.remove();
-
-    }, 250);
-
+  if (!loader) {
+    return;
   }
+
+  loader.style.opacity = "0";
+
+  loader.style.pointerEvents =
+    "none";
+
+  setTimeout(() => {
+
+    loader.remove();
+
+  }, 250);
 
 }
 
@@ -149,9 +155,8 @@ function hideLoader() {
 
 let toastTimer = null;
 
-
 function toast(
-  message,
+  msg,
   type = "success"
 ) {
 
@@ -164,15 +169,12 @@ function toast(
   const icon =
     $("toastIcon");
 
-
   if (!box || !text) {
     return;
   }
 
-
   text.textContent =
-    message;
-
+    msg;
 
   if (icon) {
 
@@ -183,7 +185,6 @@ function toast(
         ? "!"
         : "✓";
 
-
     icon.style.background =
       type === "error"
         ? "#dc2626"
@@ -193,14 +194,11 @@ function toast(
 
   }
 
-
   show("toast");
-
 
   clearTimeout(
     toastTimer
   );
-
 
   toastTimer =
     setTimeout(() => {
@@ -213,7 +211,7 @@ function toast(
 
 
 // ============================================================
-// FORM MESSAGE
+// MESSAGE
 // ============================================================
 
 function message(
@@ -229,10 +227,8 @@ function message(
     return;
   }
 
-
   el.textContent =
     text;
-
 
   el.style.color =
     type === "success"
@@ -245,14 +241,13 @@ function message(
 
 
 // ============================================================
-// ERROR TRANSLATION
+// FIREBASE ERROR HANDLER
 // ============================================================
 
 function firebaseError(error) {
 
   const code =
     error?.code || "";
-
 
   const errors = {
 
@@ -294,7 +289,6 @@ function firebaseError(error) {
 
   };
 
-
   return (
     errors[code] ||
     error?.message ||
@@ -305,7 +299,7 @@ function firebaseError(error) {
 
 
 // ============================================================
-// INITIAL AUTH UI
+// LOGIN / REGISTER
 // ============================================================
 
 function showLogin() {
@@ -365,11 +359,9 @@ function setupPasswordToggles() {
           const target =
             $(button.dataset.target);
 
-
           if (!target) {
             return;
           }
-
 
           if (
             target.type ===
@@ -411,41 +403,35 @@ function setupPasswordToggles() {
 
 
 // ============================================================
-// REGISTER ADMIN
+// ADMIN REGISTRATION
 // ============================================================
 
 async function registerAdmin(event) {
 
   event.preventDefault();
 
-
   const name =
     $("registerName")
       ?.value
       .trim();
-
 
   const email =
     $("registerEmail")
       ?.value
       .trim();
 
-
   const password =
     $("registerPassword")
       ?.value;
-
 
   const confirmPassword =
     $("registerConfirmPassword")
       ?.value;
 
-
   message(
     "registerMessage",
     ""
   );
-
 
   if (!name) {
 
@@ -457,7 +443,6 @@ async function registerAdmin(event) {
     return;
   }
 
-
   if (!email) {
 
     message(
@@ -468,8 +453,9 @@ async function registerAdmin(event) {
     return;
   }
 
-
-  if (password.length < 6) {
+  if (
+    password.length < 6
+  ) {
 
     message(
       "registerMessage",
@@ -478,7 +464,6 @@ async function registerAdmin(event) {
 
     return;
   }
-
 
   if (
     password !==
@@ -493,13 +478,11 @@ async function registerAdmin(event) {
     return;
   }
 
-
   const button =
     event.submitter ||
     document.querySelector(
       "#registerForm button[type='submit']"
     );
-
 
   if (button) {
 
@@ -511,7 +494,6 @@ async function registerAdmin(event) {
 
   }
 
-
   try {
 
     const credential =
@@ -521,10 +503,8 @@ async function registerAdmin(event) {
         password
       );
 
-
     const firebaseUser =
       credential.user;
-
 
     await updateProfile(
       firebaseUser,
@@ -533,7 +513,6 @@ async function registerAdmin(event) {
           name
       }
     );
-
 
     await setDoc(
       doc(
@@ -562,27 +541,22 @@ async function registerAdmin(event) {
       }
     );
 
-
     message(
       "registerMessage",
       "Account created successfully. You can now sign in.",
       "success"
     );
 
-
     toast(
       "Admin account created successfully."
     );
 
-
     $("registerForm")
       ?.reset();
-
 
     await signOut(
       auth
     );
-
 
     setTimeout(() => {
 
@@ -590,19 +564,16 @@ async function registerAdmin(event) {
 
     }, 1000);
 
-
   } catch (error) {
 
     console.error(
       error
     );
 
-
     message(
       "registerMessage",
       firebaseError(error)
     );
-
 
   } finally {
 
@@ -629,23 +600,19 @@ async function loginUser(event) {
 
   event.preventDefault();
 
-
   const email =
     $("loginEmail")
       ?.value
       .trim();
 
-
   const password =
     $("loginPassword")
       ?.value;
-
 
   message(
     "loginMessage",
     ""
   );
-
 
   if (
     !email ||
@@ -660,13 +627,11 @@ async function loginUser(event) {
     return;
   }
 
-
   const button =
     event.submitter ||
     document.querySelector(
       "#loginForm button[type='submit']"
     );
-
 
   if (button) {
 
@@ -678,7 +643,6 @@ async function loginUser(event) {
 
   }
 
-
   try {
 
     await signInWithEmailAndPassword(
@@ -687,11 +651,9 @@ async function loginUser(event) {
       password
     );
 
-
     toast(
       "Login successful."
     );
-
 
   } catch (error) {
 
@@ -699,12 +661,10 @@ async function loginUser(event) {
       error
     );
 
-
     message(
       "loginMessage",
       firebaseError(error)
     );
-
 
   } finally {
 
@@ -724,7 +684,7 @@ async function loginUser(event) {
 
 
 // ============================================================
-// LOAD USER PROFILE
+// LOAD PROFILE
 // ============================================================
 
 async function loadProfile(
@@ -738,10 +698,8 @@ async function loadProfile(
       firebaseUser.uid
     );
 
-
   const snap =
     await getDoc(ref);
-
 
   if (!snap.exists()) {
 
@@ -751,14 +709,11 @@ async function loadProfile(
 
   }
 
-
   const data =
     snap.data();
 
-
   state.user =
     firebaseUser;
-
 
   state.profile = {
 
@@ -768,7 +723,6 @@ async function loadProfile(
       firebaseUser.uid
 
   };
-
 
   return state.profile;
 
@@ -789,27 +743,21 @@ async function startApplication(
       firebaseUser
     );
 
-
     hide("authScreen");
 
     show("mainApp");
 
-
     updateUserInterface();
-
 
     await loadUsers();
 
     await loadTasks();
 
-
     updateDashboard();
-
 
     showPage(
       "dashboard"
     );
-
 
   } catch (error) {
 
@@ -817,17 +765,14 @@ async function startApplication(
       error
     );
 
-
     toast(
       firebaseError(error),
       "error"
     );
 
-
     await signOut(
       auth
     );
-
 
     show("authScreen");
 
@@ -839,7 +784,7 @@ async function startApplication(
 
 
 // ============================================================
-// USER INTERFACE
+// INITIALS
 // ============================================================
 
 function initials(
@@ -862,79 +807,70 @@ function initials(
 }
 
 
+// ============================================================
+// UPDATE USER INTERFACE
+// ============================================================
+
 function updateUserInterface() {
 
   const profile =
     state.profile;
 
-
   if (!profile) {
     return;
   }
-
 
   const name =
     profile.name ||
     state.user?.displayName ||
     "User";
 
-
   const role =
     profile.role ||
     "user";
 
-
   const avatar =
     initials(name);
-
 
   if ($("headerUserName"))
     $("headerUserName")
       .textContent =
       name;
 
-
   if ($("headerUserRole"))
     $("headerUserRole")
       .textContent =
       role;
-
 
   if ($("sidebarName"))
     $("sidebarName")
       .textContent =
       name;
 
-
   if ($("sidebarRole"))
     $("sidebarRole")
       .textContent =
       role;
-
 
   if ($("sidebarAvatar"))
     $("sidebarAvatar")
       .textContent =
       avatar;
 
-
   if ($("profileAvatar"))
     $("profileAvatar")
       .textContent =
       avatar;
-
 
   if ($("profileName"))
     $("profileName")
       .textContent =
       name;
 
-
   if ($("profileNameDetail"))
     $("profileNameDetail")
       .textContent =
       name;
-
 
   if ($("profileEmail"))
     $("profileEmail")
@@ -943,18 +879,15 @@ function updateUserInterface() {
         state.user?.email ||
         "—";
 
-
   if ($("profileRole"))
     $("profileRole")
       .textContent =
       role;
 
-
   if ($("profileRoleDetail"))
     $("profileRoleDetail")
       .textContent =
       role;
-
 
   if ($("profileStatus"))
     $("profileStatus")
@@ -963,11 +896,9 @@ function updateUserInterface() {
           ? "Inactive"
           : "Active";
 
-
   const isAdmin =
     role === "admin" ||
     role === "superadmin";
-
 
   document
     .querySelectorAll(
@@ -991,7 +922,6 @@ function updateUserInterface() {
 
     });
 
-
   if ($("usersNavItem")) {
 
     $("usersNavItem")
@@ -1001,7 +931,6 @@ function updateUserInterface() {
       );
 
   }
-
 
   if ($("progressNavItem")) {
 
@@ -1013,7 +942,6 @@ function updateUserInterface() {
 
   }
 
-
   if ($("addUserBtn")) {
 
     $("addUserBtn")
@@ -1023,7 +951,6 @@ function updateUserInterface() {
       );
 
   }
-
 
   if ($("addTaskBtn")) {
 
@@ -1045,19 +972,12 @@ function updateUserInterface() {
 function showPage(page) {
 
   const pages = [
-
     "dashboard",
-
     "users",
-
     "tasks",
-
     "progress",
-
     "profile"
-
   ];
-
 
   pages.forEach(
     name => {
@@ -1065,11 +985,9 @@ function showPage(page) {
       const pageElement =
         $(`${name}Page`);
 
-
       if (!pageElement) {
         return;
       }
-
 
       if (
         name === page
@@ -1102,7 +1020,6 @@ function showPage(page) {
     }
   );
 
-
   document
     .querySelectorAll(
       ".nav-item"
@@ -1119,13 +1036,10 @@ function showPage(page) {
       }
     );
 
-
   state.currentPage =
     page;
 
-
   closeMobileSidebar();
-
 
   if (
     page ===
@@ -1136,7 +1050,6 @@ function showPage(page) {
 
   }
 
-
   if (
     page ===
     "users"
@@ -1145,7 +1058,6 @@ function showPage(page) {
     renderUsers();
 
   }
-
 
   if (
     page ===
@@ -1156,11 +1068,13 @@ function showPage(page) {
 
   }
 
-
   if (
     page ===
     "progress"
   ) {
+
+    state.selectedStudentId =
+      null;
 
     renderProgress();
 
@@ -1179,22 +1093,18 @@ async function loadUsers() {
     return;
   }
 
-
   const role =
     state.profile.role;
-
 
   try {
 
     let q;
-
 
     if (
       role ===
       "superadmin"
     ) {
 
-      // Super Admin sees ALL users.
       q =
         query(
           collection(
@@ -1203,14 +1113,11 @@ async function loadUsers() {
           )
         );
 
-
     } else if (
       role ===
       "admin"
     ) {
 
-      // Normal Admin sees only
-      // students created by this admin.
       q =
         query(
           collection(
@@ -1229,7 +1136,6 @@ async function loadUsers() {
           )
         );
 
-
     } else {
 
       state.users =
@@ -1239,10 +1145,8 @@ async function loadUsers() {
 
     }
 
-
     const snap =
       await getDocs(q);
-
 
     state.users =
       snap.docs.map(
@@ -1256,8 +1160,6 @@ async function loadUsers() {
         })
       );
 
-
-    // Put admins first for Super Admin.
     state.users.sort(
       (a, b) => {
 
@@ -1265,12 +1167,14 @@ async function loadUsers() {
           a.role ===
           b.role
         ) {
+
           return (
             (a.name || "")
               .localeCompare(
                 b.name || ""
               )
           );
+
         }
 
         if (
@@ -1299,14 +1203,12 @@ async function loadUsers() {
       }
     );
 
-
   } catch (error) {
 
     console.error(
       "Users error:",
       error
     );
-
 
     state.users =
       [];
@@ -1326,22 +1228,18 @@ async function loadTasks() {
     return;
   }
 
-
   const role =
     state.profile.role;
-
 
   try {
 
     let q;
-
 
     if (
       role ===
       "superadmin"
     ) {
 
-      // Super Admin sees every task.
       q =
         query(
           collection(
@@ -1354,13 +1252,11 @@ async function loadTasks() {
           )
         );
 
-
     } else if (
       role ===
       "admin"
     ) {
 
-      // Admin sees only own tasks.
       q =
         query(
           collection(
@@ -1374,10 +1270,8 @@ async function loadTasks() {
           )
         );
 
-
     } else {
 
-      // Student sees only assigned tasks.
       q =
         query(
           collection(
@@ -1393,10 +1287,8 @@ async function loadTasks() {
 
     }
 
-
     const snap =
       await getDocs(q);
-
 
     state.tasks =
       snap.docs.map(
@@ -1410,7 +1302,6 @@ async function loadTasks() {
         })
       );
 
-
     state.tasks.sort(
       (a, b) =>
         timestampValue(
@@ -1421,14 +1312,12 @@ async function loadTasks() {
         )
     );
 
-
   } catch (error) {
 
     console.error(
       "Tasks error:",
       error
     );
-
 
     state.tasks =
       [];
@@ -1439,7 +1328,7 @@ async function loadTasks() {
 
 
 // ============================================================
-// TIMESTAMP HELPERS
+// TIMESTAMP
 // ============================================================
 
 function timestampValue(
@@ -1450,7 +1339,6 @@ function timestampValue(
     return 0;
   }
 
-
   if (
     typeof timestamp.toMillis ===
     "function"
@@ -1459,7 +1347,6 @@ function timestampValue(
     return timestamp.toMillis();
 
   }
-
 
   if (
     timestamp.seconds !==
@@ -1473,7 +1360,6 @@ function timestampValue(
 
   }
 
-
   if (
     timestamp instanceof Date
   ) {
@@ -1482,11 +1368,14 @@ function timestampValue(
 
   }
 
-
   return 0;
 
 }
 
+
+// ============================================================
+// DATE
+// ============================================================
 
 function formatDate(
   timestamp
@@ -1497,26 +1386,31 @@ function formatDate(
       timestamp
     );
 
-
   if (!value) {
     return "—";
   }
-
 
   return new Date(
     value
   ).toLocaleString(
     undefined,
     {
+
       dateStyle:
         "medium",
+
       timeStyle:
         "short"
+
     }
   );
 
 }
 
+
+// ============================================================
+// DURATION
+// ============================================================
 
 function formatDuration(
   ms
@@ -1531,19 +1425,16 @@ function formatDuration(
 
   }
 
-
   const totalSeconds =
     Math.floor(
       ms / 1000
     );
-
 
   const hours =
     Math.floor(
       totalSeconds /
       3600
     );
-
 
   const minutes =
     Math.floor(
@@ -1553,11 +1444,9 @@ function formatDuration(
       ) / 60
     );
 
-
   const seconds =
     totalSeconds %
     60;
-
 
   if (hours > 0) {
 
@@ -1565,13 +1454,11 @@ function formatDuration(
 
   }
 
-
   if (minutes > 0) {
 
     return `${minutes}m ${seconds}s`;
 
   }
-
 
   return `${seconds}s`;
 
@@ -1579,7 +1466,7 @@ function formatDuration(
 
 
 // ============================================================
-// STATUS HELPERS
+// STATUS
 // ============================================================
 
 function statusLabel(
@@ -1601,7 +1488,6 @@ function statusLabel(
       "Completed"
 
   };
-
 
   return (
     labels[status] ||
@@ -1638,7 +1524,6 @@ function getUserName(
         item.id === uid
     );
 
-
   return (
     user?.name ||
     user?.email ||
@@ -1649,7 +1534,7 @@ function getUserName(
 
 
 // ============================================================
-// UPDATE DASHBOARD
+// DASHBOARD
 // ============================================================
 
 function updateDashboard() {
@@ -1657,10 +1542,8 @@ function updateDashboard() {
   const tasks =
     state.tasks || [];
 
-
   const total =
     tasks.length;
-
 
   const pending =
     tasks.filter(
@@ -1672,14 +1555,12 @@ function updateDashboard() {
         "pending"
     ).length;
 
-
   const inProgress =
     tasks.filter(
       t =>
         t.status ===
         "in_progress"
     ).length;
-
 
   const completed =
     tasks.filter(
@@ -1688,30 +1569,25 @@ function updateDashboard() {
         "completed"
     ).length;
 
-
   if ($("statTotalTasks"))
     $("statTotalTasks")
       .textContent =
       total;
-
 
   if ($("statPending"))
     $("statPending")
       .textContent =
       pending;
 
-
   if ($("statInProgress"))
     $("statInProgress")
       .textContent =
       inProgress;
 
-
   if ($("statCompleted"))
     $("statCompleted")
       .textContent =
       completed;
-
 
   const percentage =
     total === 0
@@ -1723,12 +1599,10 @@ function updateDashboard() {
           ) * 100
         );
 
-
   if ($("overviewPercentage"))
     $("overviewPercentage")
       .textContent =
       `${percentage}%`;
-
 
   if ($("overviewProgress")) {
 
@@ -1743,14 +1617,13 @@ function updateDashboard() {
 
   }
 
-
   renderRecentTasks();
 
 }
 
 
 // ============================================================
-// RENDER RECENT TASKS
+// RECENT TASKS
 // ============================================================
 
 function renderRecentTasks() {
@@ -1758,18 +1631,15 @@ function renderRecentTasks() {
   const container =
     $("recentTasksContainer");
 
-
   if (!container) {
     return;
   }
-
 
   const tasks =
     state.tasks.slice(
       0,
       6
     );
-
 
   if (!tasks.length) {
 
@@ -1783,7 +1653,6 @@ function renderRecentTasks() {
     return;
 
   }
-
 
   container.innerHTML =
     tasks
@@ -1805,12 +1674,10 @@ function taskHTML(
     task.status ||
     "pending";
 
-
   const assignedTo =
     getUserName(
       task.assignedTo
     );
-
 
   const duration =
     task.durationMs
@@ -1818,7 +1685,6 @@ function taskHTML(
           task.durationMs
         )
       : "Not completed";
-
 
   return `
 
@@ -1920,7 +1786,6 @@ function taskHTML(
 
       </div>
 
-
       <div class="task-actions">
 
         <span
@@ -1946,7 +1811,7 @@ function taskHTML(
 
 
 // ============================================================
-// TASK ACTION BUTTONS
+// STUDENT TASK BUTTONS
 // ============================================================
 
 function taskActionButtons(
@@ -1956,11 +1821,9 @@ function taskActionButtons(
   const role =
     state.profile?.role;
 
-
   const status =
     task.status ||
     "pending";
-
 
   if (
     role !==
@@ -1970,7 +1833,6 @@ function taskActionButtons(
     return "";
 
   }
-
 
   if (
     status ===
@@ -1992,7 +1854,6 @@ function taskActionButtons(
 
   }
 
-
   if (
     status ===
     "accepted"
@@ -2012,7 +1873,6 @@ function taskActionButtons(
     `;
 
   }
-
 
   if (
     status ===
@@ -2034,7 +1894,6 @@ function taskActionButtons(
 
   }
 
-
   return "";
 
 }
@@ -2055,11 +1914,9 @@ async function acceptTask(
         taskId
     );
 
-
   if (!task) {
     return;
   }
-
 
   try {
 
@@ -2080,16 +1937,13 @@ async function acceptTask(
       }
     );
 
-
     toast(
       "Task accepted."
     );
 
-
     await loadTasks();
 
     updateDashboard();
-
 
     if (
       state.currentPage ===
@@ -2100,13 +1954,11 @@ async function acceptTask(
 
     }
 
-
   } catch (error) {
 
     console.error(
       error
     );
-
 
     toast(
       firebaseError(error),
@@ -2133,11 +1985,9 @@ async function startTask(
         taskId
     );
 
-
   if (!task) {
     return;
   }
-
 
   try {
 
@@ -2158,16 +2008,13 @@ async function startTask(
       }
     );
 
-
     toast(
       "Task started."
     );
 
-
     await loadTasks();
 
     updateDashboard();
-
 
     if (
       state.currentPage ===
@@ -2178,13 +2025,11 @@ async function startTask(
 
     }
 
-
   } catch (error) {
 
     console.error(
       error
     );
-
 
     toast(
       firebaseError(error),
@@ -2211,23 +2056,19 @@ async function completeTask(
         taskId
     );
 
-
   if (!task) {
     return;
   }
-
 
   try {
 
     const completedAt =
       Date.now();
 
-
     const startedAt =
       timestampValue(
         task.startedAt
       );
-
 
     const durationMs =
       startedAt
@@ -2237,7 +2078,6 @@ async function completeTask(
             startedAt
           )
         : 0;
-
 
     await updateDoc(
       doc(
@@ -2258,16 +2098,13 @@ async function completeTask(
       }
     );
 
-
     toast(
       "Task completed successfully."
     );
 
-
     await loadTasks();
 
     updateDashboard();
-
 
     if (
       state.currentPage ===
@@ -2278,13 +2115,11 @@ async function completeTask(
 
     }
 
-
   } catch (error) {
 
     console.error(
       error
     );
-
 
     toast(
       firebaseError(error),
@@ -2305,11 +2140,9 @@ function renderTasks() {
   const container =
     $("allTasksContainer");
 
-
   if (!container) {
     return;
   }
-
 
   const search =
     $("taskSearch")
@@ -2318,18 +2151,15 @@ function renderTasks() {
       .toLowerCase() ||
     "";
 
-
   const filter =
     $("taskStatusFilter")
       ?.value ||
     "all";
 
-
   let tasks =
     [
       ...state.tasks
     ];
-
 
   if (search) {
 
@@ -2346,7 +2176,6 @@ function renderTasks() {
               ""
             }`.toLowerCase();
 
-
           return text.includes(
             search
           );
@@ -2355,7 +2184,6 @@ function renderTasks() {
       );
 
   }
-
 
   if (
     filter !==
@@ -2374,7 +2202,6 @@ function renderTasks() {
 
   }
 
-
   if (!tasks.length) {
 
     container.innerHTML =
@@ -2388,7 +2215,6 @@ function renderTasks() {
 
   }
 
-
   container.innerHTML =
     tasks
       .map(taskHTML)
@@ -2398,7 +2224,7 @@ function renderTasks() {
 
 
 // ============================================================
-// RENDER USERS
+// USERS PAGE
 // ============================================================
 
 function renderUsers() {
@@ -2406,11 +2232,9 @@ function renderUsers() {
   const container =
     $("usersContainer");
 
-
   if (!container) {
     return;
   }
-
 
   if (!state.users.length) {
 
@@ -2438,6 +2262,566 @@ function renderUsers() {
 
   }
 
+  const role =
+    state.profile?.role;
+
+  // ----------------------------------------------------------
+  // SUPER ADMIN: SHOW ADMINS + THEIR STUDENTS
+  // ----------------------------------------------------------
+
+  if (
+    role ===
+    "superadmin"
+  ) {
+
+    const admins =
+      state.users.filter(
+        user =>
+          user.role ===
+          "admin"
+      );
+
+    const students =
+      state.users.filter(
+        user =>
+          user.role ===
+          "student"
+      );
+
+    let html = "";
+
+    // Super admin card
+    html += `
+
+      <div
+        style="
+          grid-column:1/-1;
+          padding:18px;
+          border-radius:16px;
+          background:#f7f7ff;
+          border:1px solid #e6e7f2;
+          margin-bottom:4px;
+        "
+      >
+
+        <strong
+          style="
+            color:#1d2939;
+            font-size:16px;
+          "
+        >
+          Super Admin Monitoring
+        </strong>
+
+        <div
+          style="
+            margin-top:6px;
+            color:#667085;
+            font-size:12px;
+          "
+        >
+          ${admins.length}
+          admin${admins.length === 1 ? "" : "s"}
+          •
+          ${students.length}
+          student${students.length === 1 ? "" : "s"}
+          •
+          ${state.tasks.length}
+          total task${state.tasks.length === 1 ? "" : "s"}
+        </div>
+
+      </div>
+
+    `;
+
+    if (!admins.length) {
+
+      html += `
+
+        <div
+          class="empty-state full-width"
+          style="grid-column:1/-1"
+        >
+
+          <div class="empty-icon">
+            👨‍💼
+          </div>
+
+          <h4>
+            No Admins Found
+          </h4>
+
+          <p>
+            Registered admins will appear here.
+          </p>
+
+        </div>
+
+      `;
+
+    } else {
+
+      admins.forEach(
+        admin => {
+
+          const adminStudents =
+            students.filter(
+              student =>
+                student.createdBy ===
+                admin.uid
+            );
+
+          const adminTasks =
+            state.tasks.filter(
+              task =>
+                task.assignedBy ===
+                admin.uid
+            );
+
+          const completed =
+            adminTasks.filter(
+              task =>
+                task.status ===
+                "completed"
+            ).length;
+
+          const progress =
+            adminTasks.length
+              ? Math.round(
+                  (
+                    completed /
+                    adminTasks.length
+                  ) * 100
+                )
+              : 0;
+
+          html += `
+
+            <div
+              style="
+                grid-column:1/-1;
+                padding:20px;
+                border-radius:18px;
+                background:#fff;
+                border:1px solid #e8eaf1;
+                box-shadow:0 6px 20px rgba(16,24,40,.05);
+                margin-bottom:4px;
+              "
+            >
+
+              <div
+                style="
+                  display:flex;
+                  justify-content:space-between;
+                  align-items:flex-start;
+                  gap:15px;
+                  flex-wrap:wrap;
+                "
+              >
+
+                <div
+                  style="
+                    display:flex;
+                    align-items:center;
+                    gap:12px;
+                  "
+                >
+
+                  <div
+                    style="
+                      width:48px;
+                      height:48px;
+                      border-radius:14px;
+                      background:#eef0ff;
+                      color:#4f46e5;
+                      display:flex;
+                      align-items:center;
+                      justify-content:center;
+                      font-weight:800;
+                    "
+                  >
+                    ${escapeHTML(
+                      initials(
+                        admin.name ||
+                        admin.email ||
+                        "Admin"
+                      )
+                    )}
+                  </div>
+
+                  <div>
+
+                    <div
+                      style="
+                        font-size:16px;
+                        font-weight:800;
+                        color:#1d2939;
+                      "
+                    >
+                      ${escapeHTML(
+                        admin.name ||
+                        "Admin"
+                      )}
+                    </div>
+
+                    <div
+                      style="
+                        margin-top:3px;
+                        font-size:12px;
+                        color:#667085;
+                      "
+                    >
+                      ${escapeHTML(
+                        admin.email ||
+                        "No email"
+                      )}
+                    </div>
+
+                  </div>
+
+                </div>
+
+                <span
+                  class="
+                    status-badge
+                    status-completed
+                  "
+                >
+                  Admin
+                </span>
+
+              </div>
+
+              <div
+                style="
+                  display:grid;
+                  grid-template-columns:
+                    repeat(
+                      auto-fit,
+                      minmax(120px,1fr)
+                    );
+                  gap:10px;
+                  margin-top:18px;
+                "
+              >
+
+                <div
+                  style="
+                    padding:13px;
+                    background:#f8f9fc;
+                    border-radius:12px;
+                  "
+                >
+                  <strong
+                    style="
+                      display:block;
+                      font-size:20px;
+                      color:#1d2939;
+                    "
+                  >
+                    ${adminStudents.length}
+                  </strong>
+                  <span
+                    style="
+                      font-size:11px;
+                      color:#667085;
+                    "
+                  >
+                    Users Created
+                  </span>
+                </div>
+
+                <div
+                  style="
+                    padding:13px;
+                    background:#f8f9fc;
+                    border-radius:12px;
+                  "
+                >
+                  <strong
+                    style="
+                      display:block;
+                      font-size:20px;
+                      color:#1d2939;
+                    "
+                  >
+                    ${adminTasks.length}
+                  </strong>
+                  <span
+                    style="
+                      font-size:11px;
+                      color:#667085;
+                    "
+                  >
+                    Tasks Assigned
+                  </span>
+                </div>
+
+                <div
+                  style="
+                    padding:13px;
+                    background:#f8f9fc;
+                    border-radius:12px;
+                  "
+                >
+                  <strong
+                    style="
+                      display:block;
+                      font-size:20px;
+                      color:#1d2939;
+                    "
+                  >
+                    ${completed}
+                  </strong>
+                  <span
+                    style="
+                      font-size:11px;
+                      color:#667085;
+                    "
+                  >
+                    Completed
+                  </span>
+                </div>
+
+                <div
+                  style="
+                    padding:13px;
+                    background:#f8f9fc;
+                    border-radius:12px;
+                  "
+                >
+                  <strong
+                    style="
+                      display:block;
+                      font-size:20px;
+                      color:#1d2939;
+                    "
+                  >
+                    ${progress}%
+                  </strong>
+                  <span
+                    style="
+                      font-size:11px;
+                      color:#667085;
+                    "
+                  >
+                    Progress
+                  </span>
+                </div>
+
+              </div>
+
+              <div
+                style="
+                  margin-top:18px;
+                  padding-top:16px;
+                  border-top:1px solid #edf0f5;
+                "
+              >
+
+                <div
+                  style="
+                    font-size:13px;
+                    font-weight:800;
+                    color:#344054;
+                    margin-bottom:10px;
+                  "
+                >
+                  Students Created By This Admin
+                </div>
+
+                ${
+                  adminStudents.length
+                    ? adminStudents
+                        .map(
+                          student => {
+
+                            const studentTasks =
+                              state.tasks.filter(
+                                task =>
+                                  task.assignedTo ===
+                                  student.uid
+                              );
+
+                            const studentCompleted =
+                              studentTasks.filter(
+                                task =>
+                                  task.status ===
+                                  "completed"
+                              ).length;
+
+                            const studentProgress =
+                              studentTasks.length
+                                ? Math.round(
+                                    (
+                                      studentCompleted /
+                                      studentTasks.length
+                                    ) * 100
+                                  )
+                                : 0;
+
+                            return `
+
+                              <div
+                                data-user-progress="${student.uid}"
+                                style="
+                                  cursor:pointer;
+                                  display:flex;
+                                  align-items:center;
+                                  justify-content:space-between;
+                                  gap:10px;
+                                  padding:12px;
+                                  border-radius:12px;
+                                  background:#fafbff;
+                                  border:1px solid #eef0f5;
+                                  margin-bottom:8px;
+                                "
+                                title="Click to view detailed progress"
+                              >
+
+                                <div
+                                  style="
+                                    display:flex;
+                                    align-items:center;
+                                    gap:10px;
+                                    min-width:0;
+                                  "
+                                >
+
+                                  <div
+                                    style="
+                                      width:36px;
+                                      height:36px;
+                                      flex-shrink:0;
+                                      border-radius:10px;
+                                      background:#eef0ff;
+                                      color:#4f46e5;
+                                      display:flex;
+                                      align-items:center;
+                                      justify-content:center;
+                                      font-size:12px;
+                                      font-weight:800;
+                                    "
+                                  >
+                                    ${escapeHTML(
+                                      initials(
+                                        student.name ||
+                                        student.email ||
+                                        "User"
+                                      )
+                                    )}
+                                  </div>
+
+                                  <div
+                                    style="
+                                      min-width:0;
+                                    "
+                                  >
+
+                                    <div
+                                      style="
+                                        font-size:12px;
+                                        font-weight:800;
+                                        color:#344054;
+                                      "
+                                    >
+                                      ${escapeHTML(
+                                        student.name ||
+                                        "Student"
+                                      )}
+                                    </div>
+
+                                    <div
+                                      style="
+                                        font-size:10px;
+                                        color:#667085;
+                                        overflow:hidden;
+                                        text-overflow:ellipsis;
+                                        white-space:nowrap;
+                                      "
+                                    >
+                                      ${escapeHTML(
+                                        student.email ||
+                                        ""
+                                      )}
+                                    </div>
+
+                                  </div>
+
+                                </div>
+
+                                <div
+                                  style="
+                                    text-align:right;
+                                    flex-shrink:0;
+                                  "
+                                >
+
+                                  <strong
+                                    style="
+                                      color:#4f46e5;
+                                      font-size:13px;
+                                    "
+                                  >
+                                    ${studentProgress}%
+                                  </strong>
+
+                                  <div
+                                    style="
+                                      font-size:9px;
+                                      color:#667085;
+                                    "
+                                  >
+                                    ${studentTasks.length}
+                                    tasks
+                                  </div>
+
+                                </div>
+
+                              </div>
+
+                            `;
+
+                          }
+                        )
+                        .join("")
+                    : `
+                      <div
+                        style="
+                          padding:14px;
+                          color:#98a2b3;
+                          font-size:12px;
+                          background:#fafafa;
+                          border-radius:10px;
+                        "
+                      >
+                        This admin has not created any students yet.
+                      </div>
+                    `
+                }
+
+              </div>
+
+            </div>
+
+          `;
+
+        }
+      );
+
+    }
+
+    container.innerHTML =
+      html;
+
+    return;
+
+  }
+
+
+  // ----------------------------------------------------------
+  // NORMAL ADMIN / STUDENT VIEW
+  // ----------------------------------------------------------
 
   container.innerHTML =
     state.users
@@ -2451,10 +2835,8 @@ function renderUsers() {
                 user.uid
             );
 
-
           const total =
             userTasks.length;
-
 
           const completed =
             userTasks.filter(
@@ -2462,7 +2844,6 @@ function renderUsers() {
                 task.status ===
                 "completed"
             ).length;
-
 
           const progress =
             total
@@ -2474,7 +2855,6 @@ function renderUsers() {
                 )
               : 0;
 
-
           const roleLabel =
             user.role ===
             "superadmin"
@@ -2484,10 +2864,18 @@ function renderUsers() {
               ? "Admin"
               : "Student";
 
-
           return `
 
-            <div class="user-card">
+            <div
+              class="user-card"
+              data-user-progress="${
+                user.uid
+              }"
+              style="
+                cursor:pointer;
+              "
+              title="Click to view detailed progress"
+            >
 
               <div class="user-card-top">
 
@@ -2500,7 +2888,6 @@ function renderUsers() {
                     )
                   )}
                 </div>
-
 
                 <div class="user-card-name">
 
@@ -2522,49 +2909,36 @@ function renderUsers() {
 
               </div>
 
-
               <div class="user-card-stats">
 
                 <div class="user-mini-stat">
-
                   <strong>
                     ${total}
                   </strong>
-
                   <span>
                     Tasks
                   </span>
-
                 </div>
 
-
                 <div class="user-mini-stat">
-
                   <strong>
                     ${completed}
                   </strong>
-
                   <span>
                     Done
                   </span>
-
                 </div>
 
-
                 <div class="user-mini-stat">
-
                   <strong>
                     ${progress}%
                   </strong>
-
                   <span>
                     Progress
                   </span>
-
                 </div>
 
               </div>
-
 
               <div
                 class="user-card-footer"
@@ -2586,7 +2960,6 @@ function renderUsers() {
                       : "Active"
                   }
                 </span>
-
 
                 <span
                   style="
@@ -2612,239 +2985,193 @@ function renderUsers() {
 
 
 // ============================================================
-// RENDER PROGRESS
+// PROGRESS DATA
 // ============================================================
 
-function renderProgress() {
+function getStudentProgress(
+  user
+) {
 
-  const container =
-    $("progressSummary");
-
-
-  if (!container) {
-    return;
-  }
-
-
-  const students =
-    state.users.filter(
-      user =>
-        user.role ===
-        "student"
+  const tasks =
+    state.tasks.filter(
+      task =>
+        task.assignedTo ===
+        user.uid
     );
 
+  const total =
+    tasks.length;
 
-  if (!students.length) {
+  const pending =
+    tasks.filter(
+      task =>
+        (
+          task.status ||
+          "pending"
+        ) ===
+        "pending"
+    ).length;
 
-    container.innerHTML =
-      emptyHTML(
-        "▥",
-        "No progress data",
-        "Create users and assign tasks to see progress."
-      );
+  const accepted =
+    tasks.filter(
+      task =>
+        task.status ===
+        "accepted"
+    ).length;
 
-    return;
+  const inProgress =
+    tasks.filter(
+      task =>
+        task.status ===
+        "in_progress"
+    ).length;
 
-  }
+  const completed =
+    tasks.filter(
+      task =>
+        task.status ===
+        "completed"
+    ).length;
+
+  const percentage =
+    total
+      ? Math.round(
+          (
+            completed /
+            total
+          ) * 100
+        )
+      : 0;
+
+  return {
+
+    user,
+
+    tasks,
+
+    total,
+
+    pending,
+
+    accepted,
+
+    inProgress,
+
+    completed,
+
+    percentage
+
+  };
+
+}
 
 
-  const progressData =
+// ============================================================
+// ALL STUDENTS GRAPH
+// ============================================================
+
+function renderAllStudentsGraph(
+  students
+) {
+
+  const data =
     students.map(
-      user => {
+      user =>
+        getStudentProgress(
+          user
+        )
+    );
 
-        const tasks =
-          state.tasks.filter(
-            task =>
-              task.assignedTo ===
-              user.uid
+  const bars =
+    data.map(
+      item => {
+
+        const height =
+          Math.max(
+            item.percentage,
+            4
           );
 
+        return `
 
-        const total =
-          tasks.length;
-
-
-        const pending =
-          tasks.filter(
-            task =>
-              (
-                task.status ||
-                "pending"
-              ) ===
-              "pending"
-          ).length;
-
-
-        const accepted =
-          tasks.filter(
-            task =>
-              task.status ===
-              "accepted"
-          ).length;
-
-
-        const inProgress =
-          tasks.filter(
-            task =>
-              task.status ===
-              "in_progress"
-          ).length;
-
-
-        const completed =
-          tasks.filter(
-            task =>
-              task.status ===
-              "completed"
-          ).length;
-
-
-        const percentage =
-          total
-            ? Math.round(
-                (
-                  completed /
-                  total
-                ) * 100
-              )
-            : 0;
-
-
-        return {
-
-          user,
-
-          total,
-
-          pending,
-
-          accepted,
-
-          inProgress,
-
-          completed,
-
-          percentage
-
-        };
-
-      }
-    );
-
-
-  // ==========================================================
-  // PROFESSIONAL PROGRESS GRAPH
-  // ==========================================================
-
-  const graphBars =
-    progressData
-      .map(
-        item => {
-
-          const graphHeight =
-            Math.max(
-              item.percentage,
-              4
-            );
-
-
-          return `
+          <div
+            style="
+              flex:1;
+              min-width:58px;
+              max-width:100px;
+              display:flex;
+              flex-direction:column;
+              align-items:center;
+              justify-content:flex-end;
+              height:235px;
+            "
+          >
 
             <div
               style="
-                flex:1;
-                min-width:55px;
-                display:flex;
-                flex-direction:column;
-                align-items:center;
-                justify-content:flex-end;
-                height:220px;
-                position:relative;
+                font-size:11px;
+                font-weight:800;
+                color:#4f46e5;
+                margin-bottom:6px;
               "
             >
-
-              <div
-                style="
-                  font-size:12px;
-                  font-weight:800;
-                  color:#4f46e5;
-                  margin-bottom:6px;
-                "
-              >
-                ${item.percentage}%
-              </div>
-
-
-              <div
-                title="${
-                  escapeHTML(
-                    item.user.name ||
-                    item.user.email ||
-                    "Student"
-                  )
-                }: ${
-                  item.percentage
-                }%"
-                style="
-                  width:70%;
-                  max-width:58px;
-                  height:${graphHeight * 1.55}px;
-                  max-height:155px;
-                  min-height:6px;
-                  border-radius:10px 10px 4px 4px;
-                  background:
-                    linear-gradient(
-                      180deg,
-                      #6366f1,
-                      #4f46e5
-                    );
-                  transition:height .35s ease;
-                  box-shadow:
-                    0 6px 14px
-                    rgba(79,70,229,.20);
-                "
-              ></div>
-
-
-              <div
-                style="
-                  width:100%;
-                  margin-top:10px;
-                  text-align:center;
-                  font-size:10px;
-                  font-weight:700;
-                  color:#667085;
-                  overflow:hidden;
-                  text-overflow:ellipsis;
-                  white-space:nowrap;
-                  padding:0 4px;
-                "
-                title="${escapeHTML(
-                  item.user.name ||
-                  item.user.email ||
-                  "Student"
-                )}"
-              >
-                ${escapeHTML(
-                  item.user.name ||
-                  "Student"
-                )}
-              </div>
-
+              ${item.percentage}%
             </div>
 
-          `;
+            <div
+              style="
+                width:58%;
+                max-width:55px;
+                height:${height * 1.55}px;
+                max-height:160px;
+                min-height:7px;
+                border-radius:10px 10px 4px 4px;
+                background:
+                  linear-gradient(
+                    180deg,
+                    #6366f1,
+                    #4f46e5
+                  );
+                box-shadow:
+                  0 6px 14px
+                  rgba(79,70,229,.18);
+              "
+            ></div>
 
-        }
-      )
-      .join("");
+            <div
+              style="
+                width:100%;
+                margin-top:10px;
+                text-align:center;
+                font-size:10px;
+                font-weight:700;
+                color:#667085;
+                overflow:hidden;
+                text-overflow:ellipsis;
+                white-space:nowrap;
+                padding:0 4px;
+              "
+              title="${escapeHTML(
+                item.user.name ||
+                item.user.email ||
+                "Student"
+              )}"
+            >
+              ${escapeHTML(
+                item.user.name ||
+                "Student"
+              )}
+            </div>
 
+          </div>
 
-  // ==========================================================
-  // GRAPH + SUMMARY CARDS
-  // ==========================================================
+        `;
 
-  container.innerHTML = `
+      }
+    )
+    .join("");
+
+  return `
 
     <div
       style="
@@ -2864,7 +3191,7 @@ function renderProgress() {
           align-items:flex-start;
           justify-content:space-between;
           gap:12px;
-          margin-bottom:20px;
+          margin-bottom:18px;
           flex-wrap:wrap;
         "
       >
@@ -2879,7 +3206,7 @@ function renderProgress() {
               font-weight:800;
             "
           >
-            Student Progress Graph
+            All Users Progress
           </h3>
 
           <p
@@ -2889,11 +3216,10 @@ function renderProgress() {
               font-size:12px;
             "
           >
-            Completed tasks percentage for each student.
+            Overall completed-task progress for every student.
           </p>
 
         </div>
-
 
         <div
           style="
@@ -2903,28 +3229,19 @@ function renderProgress() {
           "
         >
           ${students.length}
-          student${
-            students.length === 1
-              ? ""
-              : "s"
-          }
+          student${students.length === 1 ? "" : "s"}
         </div>
 
       </div>
 
-
       <div
         style="
-          position:relative;
-          min-height:250px;
           display:flex;
           align-items:flex-end;
           gap:12px;
           overflow-x:auto;
-          padding:
-            25px
-            10px
-            5px;
+          min-height:260px;
+          padding:20px 10px 5px;
           border-radius:14px;
           background:
             repeating-linear-gradient(
@@ -2932,17 +3249,796 @@ function renderProgress() {
               #f4f5f9 0px,
               #f4f5f9 1px,
               transparent 1px,
-              transparent 50px
+              transparent 52px
             );
         "
       >
 
-        ${graphBars}
+        ${bars}
 
       </div>
 
     </div>
 
+  `;
+
+}
+
+
+// ============================================================
+// INDIVIDUAL STUDENT PROGRESS
+// ============================================================
+
+function renderIndividualProgress(
+  user
+) {
+
+  const data =
+    getStudentProgress(
+      user
+    );
+
+  const completedPercent =
+    data.percentage;
+
+  const remainingPercent =
+    Math.max(
+      0,
+      100 -
+      completedPercent
+    );
+
+  const tasks =
+    data.tasks;
+
+  const taskRows =
+    tasks.length
+      ? tasks
+          .map(
+            task => `
+
+              <div
+                style="
+                  display:flex;
+                  justify-content:space-between;
+                  align-items:center;
+                  gap:12px;
+                  padding:12px 0;
+                  border-bottom:1px solid #edf0f5;
+                "
+              >
+
+                <div
+                  style="
+                    min-width:0;
+                  "
+                >
+
+                  <div
+                    style="
+                      font-size:12px;
+                      font-weight:800;
+                      color:#344054;
+                    "
+                  >
+                    ${escapeHTML(
+                      task.title ||
+                      "Untitled Task"
+                    )}
+                  </div>
+
+                  <div
+                    style="
+                      margin-top:3px;
+                      font-size:10px;
+                      color:#667085;
+                    "
+                  >
+                    Assigned:
+                    ${escapeHTML(
+                      formatDate(
+                        task.assignedAt
+                      )
+                    )}
+                  </div>
+
+                </div>
+
+                <span
+                  class="
+                    status-badge
+                    ${statusClass(
+                      task.status ||
+                      "pending"
+                    )}
+                  "
+                >
+                  ${statusLabel(
+                    task.status ||
+                    "pending"
+                  )}
+                </span>
+
+              </div>
+
+            `
+          )
+          .join("")
+      : `
+
+          <div
+            style="
+              padding:18px;
+              text-align:center;
+              color:#98a2b3;
+              font-size:12px;
+            "
+          >
+            No tasks assigned to this user yet.
+          </div>
+
+        `;
+
+  return `
+
+    <div
+      style="
+        width:100%;
+        margin-bottom:20px;
+        padding:20px;
+        border-radius:18px;
+        background:#ffffff;
+        border:1px solid #e8eaf1;
+        box-shadow:0 8px 24px rgba(16,24,40,.05);
+      "
+    >
+
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
+          flex-wrap:wrap;
+          margin-bottom:20px;
+        "
+      >
+
+        <div
+          style="
+            display:flex;
+            align-items:center;
+            gap:12px;
+          "
+        >
+
+          <div
+            style="
+              width:48px;
+              height:48px;
+              border-radius:14px;
+              background:#eef0ff;
+              color:#4f46e5;
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              font-weight:800;
+            "
+          >
+            ${escapeHTML(
+              initials(
+                user.name ||
+                user.email ||
+                "User"
+              )
+            )}
+          </div>
+
+          <div>
+
+            <h3
+              style="
+                margin:0;
+                font-size:17px;
+                font-weight:800;
+                color:#1d2939;
+              "
+            >
+              ${escapeHTML(
+                user.name ||
+                "Student"
+              )}
+            </h3>
+
+            <div
+              style="
+                margin-top:3px;
+                font-size:11px;
+                color:#667085;
+              "
+            >
+              ${escapeHTML(
+                user.email ||
+                ""
+              )}
+            </div>
+
+          </div>
+
+        </div>
+
+        <button
+          type="button"
+          data-close-student-progress="true"
+          class="small-btn"
+        >
+          ← All Users
+        </button>
+
+      </div>
+
+
+      <div
+        style="
+          display:grid;
+          grid-template-columns:
+            repeat(
+              auto-fit,
+              minmax(120px,1fr)
+            );
+          gap:10px;
+          margin-bottom:20px;
+        "
+      >
+
+        <div
+          style="
+            padding:14px;
+            border-radius:12px;
+            background:#f8f9fc;
+          "
+        >
+          <strong
+            style="
+              display:block;
+              font-size:22px;
+              color:#1d2939;
+            "
+          >
+            ${data.total}
+          </strong>
+
+          <span
+            style="
+              font-size:10px;
+              color:#667085;
+            "
+          >
+            Total Tasks
+          </span>
+        </div>
+
+
+        <div
+          style="
+            padding:14px;
+            border-radius:12px;
+            background:#f8f9fc;
+          "
+        >
+          <strong
+            style="
+              display:block;
+              font-size:22px;
+              color:#15803d;
+            "
+          >
+            ${data.completed}
+          </strong>
+
+          <span
+            style="
+              font-size:10px;
+              color:#667085;
+            "
+          >
+            Completed
+          </span>
+        </div>
+
+
+        <div
+          style="
+            padding:14px;
+            border-radius:12px;
+            background:#f8f9fc;
+          "
+        >
+          <strong
+            style="
+              display:block;
+              font-size:22px;
+              color:#4f46e5;
+            "
+          >
+            ${data.inProgress}
+          </strong>
+
+          <span
+            style="
+              font-size:10px;
+              color:#667085;
+            "
+          >
+            In Progress
+          </span>
+        </div>
+
+
+        <div
+          style="
+            padding:14px;
+            border-radius:12px;
+            background:#f8f9fc;
+          "
+        >
+          <strong
+            style="
+              display:block;
+              font-size:22px;
+              color:#b45309;
+            "
+          >
+            ${data.pending}
+          </strong>
+
+          <span
+            style="
+              font-size:10px;
+              color:#667085;
+            "
+          >
+            Pending
+          </span>
+        </div>
+
+
+        <div
+          style="
+            padding:14px;
+            border-radius:12px;
+            background:#f8f9fc;
+          "
+        >
+          <strong
+            style="
+              display:block;
+              font-size:22px;
+              color:#4f46e5;
+            "
+          >
+            ${data.percentage}%
+          </strong>
+
+          <span
+            style="
+              font-size:10px;
+              color:#667085;
+            "
+          >
+            Completion
+          </span>
+        </div>
+
+      </div>
+
+
+      <div
+        style="
+          display:grid;
+          grid-template-columns:
+            repeat(
+              auto-fit,
+              minmax(180px,1fr)
+            );
+          gap:18px;
+          align-items:center;
+        "
+      >
+
+        <div
+          style="
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            min-height:210px;
+          "
+        >
+
+          <div
+            style="
+              width:170px;
+              height:170px;
+              border-radius:50%;
+              background:
+                conic-gradient(
+                  #4f46e5
+                  ${completedPercent * 3.6}deg,
+                  #edf0f7
+                  ${completedPercent * 3.6}deg
+                );
+              display:flex;
+              align-items:center;
+              justify-content:center;
+            "
+          >
+
+            <div
+              style="
+                width:125px;
+                height:125px;
+                border-radius:50%;
+                background:#fff;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+              "
+            >
+
+              <strong
+                style="
+                  font-size:30px;
+                  color:#1d2939;
+                "
+              >
+                ${completedPercent}%
+              </strong>
+
+              <span
+                style="
+                  font-size:10px;
+                  color:#667085;
+                "
+              >
+                Completed
+              </span>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <div>
+
+          <h4
+            style="
+              margin:0 0 12px;
+              font-size:14px;
+              color:#344054;
+            "
+          >
+            Task Progress
+          </h4>
+
+          <div
+            style="
+              display:grid;
+              gap:9px;
+            "
+          >
+
+            <div
+              style="
+                display:flex;
+                justify-content:space-between;
+                font-size:11px;
+                color:#667085;
+              "
+            >
+              <span>
+                Completed
+              </span>
+              <strong>
+                ${data.completed}
+              </strong>
+            </div>
+
+            <div
+              style="
+                height:7px;
+                background:#edf0f7;
+                border-radius:20px;
+                overflow:hidden;
+              "
+            >
+              <div
+                style="
+                  height:100%;
+                  width:${
+                    data.total
+                      ? (
+                          data.completed /
+                          data.total
+                        ) * 100
+                      : 0
+                  }%;
+                  background:#4f46e5;
+                  border-radius:20px;
+                "
+              ></div>
+            </div>
+
+
+            <div
+              style="
+                display:flex;
+                justify-content:space-between;
+                font-size:11px;
+                color:#667085;
+              "
+            >
+              <span>
+                In Progress
+              </span>
+              <strong>
+                ${data.inProgress}
+              </strong>
+            </div>
+
+            <div
+              style="
+                height:7px;
+                background:#edf0f7;
+                border-radius:20px;
+                overflow:hidden;
+              "
+            >
+              <div
+                style="
+                  height:100%;
+                  width:${
+                    data.total
+                      ? (
+                          data.inProgress /
+                          data.total
+                        ) * 100
+                      : 0
+                  }%;
+                  background:#6366f1;
+                  border-radius:20px;
+                "
+              ></div>
+            </div>
+
+
+            <div
+              style="
+                display:flex;
+                justify-content:space-between;
+                font-size:11px;
+                color:#667085;
+              "
+            >
+              <span>
+                Accepted
+              </span>
+              <strong>
+                ${data.accepted}
+              </strong>
+            </div>
+
+            <div
+              style="
+                height:7px;
+                background:#edf0f7;
+                border-radius:20px;
+                overflow:hidden;
+              "
+            >
+              <div
+                style="
+                  height:100%;
+                  width:${
+                    data.total
+                      ? (
+                          data.accepted /
+                          data.total
+                        ) * 100
+                      : 0
+                  }%;
+                  background:#8b5cf6;
+                  border-radius:20px;
+                "
+              ></div>
+            </div>
+
+
+            <div
+              style="
+                display:flex;
+                justify-content:space-between;
+                font-size:11px;
+                color:#667085;
+              "
+            >
+              <span>
+                Pending
+              </span>
+              <strong>
+                ${data.pending}
+              </strong>
+            </div>
+
+            <div
+              style="
+                height:7px;
+                background:#edf0f7;
+                border-radius:20px;
+                overflow:hidden;
+              "
+            >
+              <div
+                style="
+                  height:100%;
+                  width:${
+                    data.total
+                      ? (
+                          data.pending /
+                          data.total
+                        ) * 100
+                      : 0
+                  }%;
+                  background:#f59e0b;
+                  border-radius:20px;
+                "
+              ></div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div
+      style="
+        width:100%;
+        padding:20px;
+        border-radius:18px;
+        background:#ffffff;
+        border:1px solid #e8eaf1;
+        box-shadow:0 8px 24px rgba(16,24,40,.05);
+      "
+    >
+
+      <h3
+        style="
+          margin:0 0 12px;
+          font-size:16px;
+          color:#1d2939;
+        "
+      >
+        ${escapeHTML(
+          user.name ||
+          "Student"
+        )}'s Tasks
+      </h3>
+
+      ${taskRows}
+
+    </div>
+
+  `;
+
+}
+
+
+// ============================================================
+// PROGRESS PAGE
+// ============================================================
+
+function renderProgress() {
+
+  const container =
+    $("progressSummary");
+
+  if (!container) {
+    return;
+  }
+
+  const role =
+    state.profile?.role;
+
+  const students =
+    state.users.filter(
+      user =>
+        user.role ===
+        "student"
+    );
+
+  // ----------------------------------------------------------
+  // INDIVIDUAL STUDENT
+  // ----------------------------------------------------------
+
+  if (
+    state.selectedStudentId
+  ) {
+
+    const selectedUser =
+      students.find(
+        user =>
+          user.uid ===
+          state.selectedStudentId
+      );
+
+    if (selectedUser) {
+
+      container.innerHTML =
+        renderIndividualProgress(
+          selectedUser
+        );
+
+      return;
+
+    }
+
+    state.selectedStudentId =
+      null;
+
+  }
+
+
+  // ----------------------------------------------------------
+  // NO STUDENTS
+  // ----------------------------------------------------------
+
+  if (!students.length) {
+
+    container.innerHTML =
+      emptyHTML(
+        "▥",
+        "No progress data",
+        "Create users and assign tasks to see progress."
+      );
+
+    return;
+
+  }
+
+
+  // ----------------------------------------------------------
+  // ALL STUDENTS GRAPH
+  // ----------------------------------------------------------
+
+  let html =
+    renderAllStudentsGraph(
+      students
+    );
+
+
+  // ----------------------------------------------------------
+  // STUDENT CARDS
+  // ----------------------------------------------------------
+
+  html += `
+
+    <div
+      style="
+        margin-top:4px;
+        margin-bottom:12px;
+        font-size:14px;
+        font-weight:800;
+        color:#344054;
+      "
+    >
+      Student Progress
+    </div>
 
     <div
       style="
@@ -2956,100 +4052,492 @@ function renderProgress() {
       "
     >
 
-      ${progressData
+      ${students
         .map(
-          item => `
+          user => {
 
-            <div
-              class="progress-user"
-              style="
-                padding:17px;
-                border-radius:16px;
-                background:#fff;
-                border:1px solid #e8eaf1;
-                box-shadow:
-                  0 5px 18px
-                  rgba(16,24,40,.04);
-              "
-            >
+            const data =
+              getStudentProgress(
+                user
+              );
+
+            return `
 
               <div
-                class="progress-user-header"
-              >
-
-                <span
-                  class="progress-user-name"
-                >
-                  ${escapeHTML(
-                    item.user.name ||
-                    item.user.email ||
-                    "User"
-                  )}
-                </span>
-
-                <span
-                  class="progress-percentage"
-                >
-                  ${item.percentage}%
-                </span>
-
-              </div>
-
-
-              <div
-                class="progress-bar"
+                data-user-progress="${user.uid}"
+                style="
+                  cursor:pointer;
+                  padding:17px;
+                  border-radius:16px;
+                  background:#fff;
+                  border:1px solid #e8eaf1;
+                  box-shadow:
+                    0 5px 18px
+                    rgba(16,24,40,.04);
+                  transition:
+                    transform .15s ease,
+                    box-shadow .15s ease;
+                "
+                title="Click to view detailed progress"
               >
 
                 <div
-                  class="progress-bar-fill"
                   style="
-                    width:${item.percentage}%
+                    display:flex;
+                    align-items:center;
+                    justify-content:space-between;
+                    gap:10px;
                   "
-                ></div>
+                >
+
+                  <div
+                    style="
+                      display:flex;
+                      align-items:center;
+                      gap:9px;
+                      min-width:0;
+                    "
+                  >
+
+                    <div
+                      style="
+                        width:38px;
+                        height:38px;
+                        flex-shrink:0;
+                        border-radius:11px;
+                        background:#eef0ff;
+                        color:#4f46e5;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        font-size:11px;
+                        font-weight:800;
+                      "
+                    >
+                      ${escapeHTML(
+                        initials(
+                          user.name ||
+                          user.email ||
+                          "User"
+                        )
+                      )}
+                    </div>
+
+                    <div
+                      style="
+                        min-width:0;
+                      "
+                    >
+
+                      <div
+                        style="
+                          font-size:12px;
+                          font-weight:800;
+                          color:#344054;
+                          overflow:hidden;
+                          text-overflow:ellipsis;
+                          white-space:nowrap;
+                        "
+                      >
+                        ${escapeHTML(
+                          user.name ||
+                          "Student"
+                        )}
+                      </div>
+
+                      <div
+                        style="
+                          font-size:10px;
+                          color:#667085;
+                          overflow:hidden;
+                          text-overflow:ellipsis;
+                          white-space:nowrap;
+                        "
+                      >
+                        ${escapeHTML(
+                          user.email ||
+                          ""
+                        )}
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  <strong
+                    style="
+                      color:#4f46e5;
+                      font-size:14px;
+                    "
+                  >
+                    ${data.percentage}%
+                  </strong>
+
+                </div>
+
+
+                <div
+                  style="
+                    height:8px;
+                    margin-top:15px;
+                    background:#edf0f7;
+                    border-radius:20px;
+                    overflow:hidden;
+                  "
+                >
+
+                  <div
+                    style="
+                      height:100%;
+                      width:${data.percentage}%;
+                      background:
+                        linear-gradient(
+                          90deg,
+                          #6366f1,
+                          #4f46e5
+                        );
+                      border-radius:20px;
+                    "
+                  ></div>
+
+                </div>
+
+
+                <div
+                  style="
+                    display:flex;
+                    justify-content:space-between;
+                    gap:5px;
+                    margin-top:10px;
+                    font-size:10px;
+                    color:#667085;
+                  "
+                >
+
+                  <span>
+                    ${data.completed}
+                    completed
+                  </span>
+
+                  <span>
+                    ${data.total}
+                    total
+                  </span>
+
+                </div>
+
+
+                <div
+                  style="
+                    margin-top:10px;
+                    font-size:9px;
+                    font-weight:700;
+                    color:#4f46e5;
+                    text-align:right;
+                  "
+                >
+                  Click for detailed graph →
+                </div>
 
               </div>
 
+            `;
 
-              <div
-                class="progress-user-meta"
-              >
-
-                <span>
-                  ${item.completed}
-                  completed
-                </span>
-
-                <span>
-                  ${item.inProgress}
-                  in progress
-                </span>
-
-                <span>
-                  ${item.accepted}
-                  accepted
-                </span>
-
-                <span>
-                  ${item.pending}
-                  pending
-                </span>
-
-                <span>
-                  ${item.total}
-                  total
-                </span>
-
-              </div>
-
-            </div>
-
-          `
+          }
         )
         .join("")}
 
     </div>
 
   `;
+
+
+  // ----------------------------------------------------------
+  // SUPER ADMIN INFORMATION
+  // ----------------------------------------------------------
+
+  if (
+    role ===
+    "superadmin"
+  ) {
+
+    const admins =
+      state.users.filter(
+        user =>
+          user.role ===
+          "admin"
+      );
+
+    html += `
+
+      <div
+        style="
+          margin-top:20px;
+          padding:20px;
+          border-radius:18px;
+          background:#fff;
+          border:1px solid #e8eaf1;
+          box-shadow:
+            0 8px 24px
+            rgba(16,24,40,.05);
+        "
+      >
+
+        <div
+          style="
+            display:flex;
+            justify-content:space-between;
+            gap:10px;
+            flex-wrap:wrap;
+            margin-bottom:15px;
+          "
+        >
+
+          <div>
+
+            <h3
+              style="
+                margin:0;
+                font-size:16px;
+                color:#1d2939;
+                font-weight:800;
+              "
+            >
+              Admin Monitoring
+            </h3>
+
+            <p
+              style="
+                margin:5px 0 0;
+                font-size:11px;
+                color:#667085;
+              "
+            >
+              Admin accounts, users created and tasks assigned.
+            </p>
+
+          </div>
+
+          <strong
+            style="
+              color:#4f46e5;
+              font-size:12px;
+            "
+          >
+            ${admins.length}
+            admin${admins.length === 1 ? "" : "s"}
+          </strong>
+
+        </div>
+
+
+        <div
+          style="
+            display:grid;
+            gap:10px;
+          "
+        >
+
+          ${
+            admins.length
+              ? admins
+                  .map(
+                    admin => {
+
+                      const adminStudents =
+                        students.filter(
+                          student =>
+                            student.createdBy ===
+                            admin.uid
+                        );
+
+                      const adminTasks =
+                        state.tasks.filter(
+                          task =>
+                            task.assignedBy ===
+                            admin.uid
+                        );
+
+                      const completed =
+                        adminTasks.filter(
+                          task =>
+                            task.status ===
+                            "completed"
+                        ).length;
+
+                      return `
+
+                        <div
+                          style="
+                            padding:14px;
+                            border-radius:13px;
+                            background:#f8f9fc;
+                            border:1px solid #edf0f5;
+                          "
+                        >
+
+                          <div
+                            style="
+                              display:flex;
+                              justify-content:space-between;
+                              gap:10px;
+                              align-items:center;
+                            "
+                          >
+
+                            <div>
+
+                              <strong
+                                style="
+                                  display:block;
+                                  font-size:13px;
+                                  color:#344054;
+                                "
+                              >
+                                ${escapeHTML(
+                                  admin.name ||
+                                  "Admin"
+                                )}
+                              </strong>
+
+                              <span
+                                style="
+                                  display:block;
+                                  margin-top:3px;
+                                  font-size:10px;
+                                  color:#667085;
+                                "
+                              >
+                                ${escapeHTML(
+                                  admin.email ||
+                                  ""
+                                )}
+                              </span>
+
+                            </div>
+
+                            <span
+                              class="
+                                status-badge
+                                status-completed
+                              "
+                            >
+                              Admin
+                            </span>
+
+                          </div>
+
+
+                          <div
+                            style="
+                              display:grid;
+                              grid-template-columns:
+                                repeat(
+                                  3,
+                                  1fr
+                                );
+                              gap:7px;
+                              margin-top:12px;
+                            "
+                          >
+
+                            <div
+                              style="
+                                text-align:center;
+                                padding:9px;
+                                background:#fff;
+                                border-radius:9px;
+                              "
+                            >
+                              <strong>
+                                ${adminStudents.length}
+                              </strong>
+                              <div
+                                style="
+                                  font-size:9px;
+                                  color:#667085;
+                                "
+                              >
+                                Users
+                              </div>
+                            </div>
+
+                            <div
+                              style="
+                                text-align:center;
+                                padding:9px;
+                                background:#fff;
+                                border-radius:9px;
+                              "
+                            >
+                              <strong>
+                                ${adminTasks.length}
+                              </strong>
+                              <div
+                                style="
+                                  font-size:9px;
+                                  color:#667085;
+                                "
+                              >
+                                Tasks
+                              </div>
+                            </div>
+
+                            <div
+                              style="
+                                text-align:center;
+                                padding:9px;
+                                background:#fff;
+                                border-radius:9px;
+                              "
+                            >
+                              <strong>
+                                ${completed}
+                              </strong>
+                              <div
+                                style="
+                                  font-size:9px;
+                                  color:#667085;
+                                "
+                              >
+                                Done
+                              </div>
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                      `;
+
+                    }
+                  )
+                  .join("")
+              : `
+                  <div
+                    style="
+                      padding:15px;
+                      text-align:center;
+                      color:#98a2b3;
+                      font-size:11px;
+                    "
+                  >
+                    No admin accounts found.
+                  </div>
+                `
+          }
+
+        </div>
+
+      </div>
+
+    `;
+
+  }
+
+
+  container.innerHTML =
+    html;
 
 }
 
@@ -3090,7 +4578,7 @@ function emptyHTML(
 
 
 // ============================================================
-// ADD USER MODAL
+// USER MODAL
 // ============================================================
 
 function openUserModal() {
@@ -3111,17 +4599,14 @@ function openUserModal() {
 
   }
 
-
   show(
     "userModal"
   );
-
 
   message(
     "userMessage",
     ""
   );
-
 
   $("userForm")
     ?.reset();
@@ -3139,7 +4624,7 @@ function closeUserModal() {
 
 
 // ============================================================
-// ADD TASK MODAL
+// TASK MODAL
 // ============================================================
 
 function openTaskModal() {
@@ -3160,21 +4645,17 @@ function openTaskModal() {
 
   }
 
-
   show(
     "taskModal"
   );
-
 
   message(
     "taskMessage",
     ""
   );
 
-
   $("taskForm")
     ?.reset();
-
 
   populateTaskUsers();
 
@@ -3191,7 +4672,7 @@ function closeTaskModal() {
 
 
 // ============================================================
-// POPULATE TASK USERS
+// TASK USERS
 // ============================================================
 
 function populateTaskUsers() {
@@ -3199,11 +4680,9 @@ function populateTaskUsers() {
   const select =
     $("taskUser");
 
-
   if (!select) {
     return;
   }
-
 
   select.innerHTML = `
 
@@ -3213,15 +4692,12 @@ function populateTaskUsers() {
 
   `;
 
-
-  // Only students can receive tasks.
   const students =
     state.users.filter(
       user =>
         user.role ===
         "student"
     );
-
 
   students.forEach(
     user => {
@@ -3231,17 +4707,14 @@ function populateTaskUsers() {
           "option"
         );
 
-
       option.value =
         user.uid ||
         user.id;
-
 
       option.textContent =
         `${user.name || "User"} — ${
           user.email || ""
         }`;
-
 
       select.appendChild(
         option
@@ -3254,7 +4727,7 @@ function populateTaskUsers() {
 
 
 // ============================================================
-// CREATE USER / STUDENT
+// CREATE USER
 // ============================================================
 
 async function createUser(
@@ -3263,10 +4736,8 @@ async function createUser(
 
   event.preventDefault();
 
-
   const role =
     state.profile?.role;
-
 
   if (
     role !== "admin" &&
@@ -3282,34 +4753,28 @@ async function createUser(
 
   }
 
-
   const name =
     $("userName")
       ?.value
       .trim();
-
 
   const email =
     $("userEmail")
       ?.value
       .trim();
 
-
   const password =
     $("userPassword")
       ?.value;
-
 
   const confirmPassword =
     $("userConfirmPassword")
       ?.value;
 
-
   message(
     "userMessage",
     ""
   );
-
 
   if (!name) {
 
@@ -3322,7 +4787,6 @@ async function createUser(
 
   }
 
-
   if (!email) {
 
     message(
@@ -3333,7 +4797,6 @@ async function createUser(
     return;
 
   }
-
 
   if (
     !password ||
@@ -3349,7 +4812,6 @@ async function createUser(
 
   }
 
-
   if (
     password !==
     confirmPassword
@@ -3364,10 +4826,7 @@ async function createUser(
 
   }
 
-
-  if (
-    !secondaryAuth
-  ) {
+  if (!secondaryAuth) {
 
     message(
       "userMessage",
@@ -3378,10 +4837,8 @@ async function createUser(
 
   }
 
-
   const button =
     event.submitter;
-
 
   if (button) {
 
@@ -3393,11 +4850,8 @@ async function createUser(
 
   }
 
-
   try {
 
-    // Create Firebase Authentication
-    // account in the secondary app.
     const credential =
       await createUserWithEmailAndPassword(
         secondaryAuth,
@@ -3405,10 +4859,8 @@ async function createUser(
         password
       );
 
-
     const student =
       credential.user;
-
 
     await updateProfile(
       student,
@@ -3418,8 +4870,6 @@ async function createUser(
       }
     );
 
-
-    // Create Firestore student profile.
     await setDoc(
       doc(
         db,
@@ -3455,12 +4905,9 @@ async function createUser(
       }
     );
 
-
-    // Sign out only the secondary app.
     await signOut(
       secondaryAuth
     );
-
 
     message(
       "userMessage",
@@ -3468,31 +4915,28 @@ async function createUser(
       "success"
     );
 
-
     toast(
       "Student account created successfully."
     );
 
-
     $("userForm")
       ?.reset();
 
-
     await loadUsers();
 
+    await loadTasks();
 
     renderUsers();
 
+    renderProgress();
 
     populateTaskUsers();
-
 
     setTimeout(() => {
 
       closeUserModal();
 
     }, 900);
-
 
   } catch (error) {
 
@@ -3501,12 +4945,10 @@ async function createUser(
       error
     );
 
-
     message(
       "userMessage",
       firebaseError(error)
     );
-
 
   } finally {
 
@@ -3535,7 +4977,6 @@ async function createTask(
 
   event.preventDefault();
 
-
   if (
     state.profile?.role !==
       "admin" &&
@@ -3547,35 +4988,29 @@ async function createTask(
 
   }
 
-
   const title =
     $("taskTitle")
       ?.value
       .trim();
-
 
   const description =
     $("taskDescription")
       ?.value
       .trim();
 
-
   const assignedTo =
     $("taskUser")
       ?.value;
-
 
   const dueDate =
     $("taskDueDate")
       ?.value ||
     null;
 
-
   message(
     "taskMessage",
     ""
   );
-
 
   if (!title) {
 
@@ -3588,7 +5023,6 @@ async function createTask(
 
   }
 
-
   if (!description) {
 
     message(
@@ -3599,7 +5033,6 @@ async function createTask(
     return;
 
   }
-
 
   if (!assignedTo) {
 
@@ -3612,10 +5045,8 @@ async function createTask(
 
   }
 
-
   const button =
     event.submitter;
-
 
   if (button) {
 
@@ -3626,7 +5057,6 @@ async function createTask(
       "Assigning...";
 
   }
-
 
   try {
 
@@ -3639,7 +5069,6 @@ async function createTask(
           ) ===
           assignedTo
       );
-
 
     await addDoc(
       collection(
@@ -3690,23 +5119,21 @@ async function createTask(
       }
     );
 
-
     toast(
       "Task assigned successfully."
     );
 
-
     closeTaskModal();
-
 
     await loadTasks();
 
-
     updateDashboard();
-
 
     renderTasks();
 
+    renderProgress();
+
+    renderUsers();
 
   } catch (error) {
 
@@ -3714,12 +5141,10 @@ async function createTask(
       error
     );
 
-
     message(
       "taskMessage",
       firebaseError(error)
     );
-
 
   } finally {
 
@@ -3739,7 +5164,7 @@ async function createTask(
 
 
 // ============================================================
-// SEARCH / FILTER
+// TASK FILTERS
 // ============================================================
 
 function setupTaskFilters() {
@@ -3749,7 +5174,6 @@ function setupTaskFilters() {
       "input",
       renderTasks
     );
-
 
   $("taskStatusFilter")
     ?.addEventListener(
@@ -3770,7 +5194,6 @@ function openMobileSidebar() {
     ?.classList
     .add("open");
 
-
   $("sidebarOverlay")
     ?.classList
     .remove("hidden");
@@ -3783,7 +5206,6 @@ function closeMobileSidebar() {
   $("sidebar")
     ?.classList
     .remove("open");
-
 
   $("sidebarOverlay")
     ?.classList
@@ -3833,12 +5255,11 @@ function escapeHTML(
 
 
 // ============================================================
-// EVENT LISTENERS
+// EVENTS
 // ============================================================
 
 function setupEvents() {
 
-  // Login
   $("loginForm")
     ?.addEventListener(
       "submit",
@@ -3846,7 +5267,6 @@ function setupEvents() {
     );
 
 
-  // Register
   $("registerForm")
     ?.addEventListener(
       "submit",
@@ -3854,7 +5274,6 @@ function setupEvents() {
     );
 
 
-  // Login/Register switch
   $("showRegisterBtn")
     ?.addEventListener(
       "click",
@@ -3869,7 +5288,6 @@ function setupEvents() {
     );
 
 
-  // Password toggles
   setupPasswordToggles();
 
 
@@ -3888,7 +5306,6 @@ function setupEvents() {
             const page =
               item.dataset.page;
 
-
             if (page) {
 
               showPage(
@@ -3904,7 +5321,7 @@ function setupEvents() {
     );
 
 
-  // Dashboard buttons
+  // Page target buttons
   document
     .querySelectorAll(
       "[data-page-target]"
@@ -3939,11 +5356,9 @@ function setupEvents() {
             auth
           );
 
-
           toast(
             "Logged out successfully."
           );
-
 
         } catch (error) {
 
@@ -4004,7 +5419,6 @@ function setupEvents() {
             const modalId =
               button.dataset.closeModal;
 
-
             hide(
               modalId
             );
@@ -4033,7 +5447,6 @@ function setupEvents() {
                 ".modal"
               );
 
-
             modal?.classList
               .add(
                 "hidden"
@@ -4061,11 +5474,13 @@ function setupEvents() {
     );
 
 
-  // Task filters
   setupTaskFilters();
 
 
-  // Task action delegation
+  // ----------------------------------------------------------
+  // TASK ACTIONS
+  // ----------------------------------------------------------
+
   document.addEventListener(
     "click",
     async event => {
@@ -4075,24 +5490,19 @@ function setupEvents() {
           "[data-task-action]"
         );
 
-
       if (!button) {
         return;
       }
 
-
       const action =
         button.dataset.taskAction;
-
 
       const taskId =
         button.dataset.taskId;
 
-
       if (!taskId) {
         return;
       }
-
 
       if (
         action ===
@@ -4105,7 +5515,6 @@ function setupEvents() {
 
       }
 
-
       if (
         action ===
         "start"
@@ -4117,7 +5526,6 @@ function setupEvents() {
 
       }
 
-
       if (
         action ===
         "complete"
@@ -4128,6 +5536,95 @@ function setupEvents() {
         );
 
       }
+
+    }
+  );
+
+
+  // ----------------------------------------------------------
+  // USER / STUDENT PROGRESS CLICK
+  // ----------------------------------------------------------
+
+  document.addEventListener(
+    "click",
+    event => {
+
+      const card =
+        event.target.closest(
+          "[data-user-progress]"
+        );
+
+      if (!card) {
+        return;
+      }
+
+      const studentId =
+        card.dataset.userProgress;
+
+      if (!studentId) {
+        return;
+      }
+
+      const student =
+        state.users.find(
+          user =>
+            user.uid ===
+            studentId
+        );
+
+      if (
+        !student ||
+        student.role !==
+          "student"
+      ) {
+
+        return;
+
+      }
+
+      state.selectedStudentId =
+        studentId;
+
+      if (
+        state.currentPage !==
+        "progress"
+      ) {
+
+        showPage(
+          "progress"
+        );
+
+      } else {
+
+        renderProgress();
+
+      }
+
+    }
+  );
+
+
+  // ----------------------------------------------------------
+  // CLOSE INDIVIDUAL PROGRESS
+  // ----------------------------------------------------------
+
+  document.addEventListener(
+    "click",
+    event => {
+
+      const button =
+        event.target.closest(
+          "[data-close-student-progress]"
+        );
+
+      if (!button) {
+        return;
+      }
+
+      state.selectedStudentId =
+        null;
+
+      renderProgress();
 
     }
   );
@@ -4163,13 +5660,11 @@ onAuthStateChanged(
 
       }
 
-
     } catch (error) {
 
       console.error(
         error
       );
-
 
       show(
         "authScreen"
@@ -4178,7 +5673,6 @@ onAuthStateChanged(
       hide(
         "mainApp"
       );
-
 
     } finally {
 
@@ -4191,7 +5685,7 @@ onAuthStateChanged(
 
 
 // ============================================================
-// INITIALIZE
+// START
 // ============================================================
 
 setupEvents();
