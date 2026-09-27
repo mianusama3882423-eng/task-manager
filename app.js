@@ -1,14 +1,10 @@
 // ============================================================
 // TASK MANAGER
-// Version 1.0.5
-// Complete Application Logic
+// Version 1.0.6
+// Complete Application Logic + Startup Error Screen
 // ============================================================
 
-import {
-  app,
-  auth,
-  db
-} from "./firebase.js";
+import { app, auth, db } from "./firebase.js";
 
 import {
   createUserWithEmailAndPassword,
@@ -19,7 +15,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 import {
-  getFirestore,
   collection,
   doc,
   getDoc,
@@ -46,37 +41,23 @@ import {
   signOut as signOutSecondary
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
-
-// ============================================================
-// VERSION
-// ============================================================
-
-const VERSION = "v1.0.5";
-
-
-// ============================================================
-// STATE
-// ============================================================
+const VERSION = "v1.0.6";
 
 const state = {
   user: null,
   profile: null,
-
   users: [],
   tasks: [],
-
   selectedStudentId: null,
   currentPage: "dashboard",
-
   loading: false
 };
 
+const $ = id => document.getElementById(id);
 
 // ============================================================
-// BASIC HELPERS
+// HELPERS
 // ============================================================
-
-const $ = (id) => document.getElementById(id);
 
 function escapeHTML(value) {
   if (value === null || value === undefined) return "";
@@ -89,144 +70,8 @@ function escapeHTML(value) {
     .replace(/'/g, "&#039;");
 }
 
-
-function getName(user) {
-  if (!user) return "User";
-
-  return (
-    user.name ||
-    user.displayName ||
-    user.email ||
-    "User"
-  );
-}
-
-
-function getRole(user) {
-  if (!user) return "";
-
-  return user.role || "";
-}
-
-
-function formatDate(value) {
-  if (!value) return "—";
-
-  try {
-    let date;
-
-    if (value?.toDate) {
-      date = value.toDate();
-    } else if (value instanceof Date) {
-      date = value;
-    } else {
-      date = new Date(value);
-    }
-
-    if (isNaN(date.getTime())) return "—";
-
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric"
-    });
-  } catch {
-    return "—";
-  }
-}
-
-
-function formatDateTime(value) {
-  if (!value) return "—";
-
-  try {
-    let date;
-
-    if (value?.toDate) {
-      date = value.toDate();
-    } else if (value instanceof Date) {
-      date = value;
-    } else {
-      date = new Date(value);
-    }
-
-    if (isNaN(date.getTime())) return "—";
-
-    return date.toLocaleString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit"
-    });
-  } catch {
-    return "—";
-  }
-}
-
-
-function getTaskDate(task) {
-  return task.assignedAt || task.createdAt || null;
-}
-
-
-function getStatusText(status) {
-  const map = {
-    pending: "Pending",
-    accepted: "Accepted",
-    in_progress: "In Progress",
-    completed: "Completed"
-  };
-
-  return map[status] || "Pending";
-}
-
-
-function getStatusClass(status) {
-  if (status === "completed") return "completed";
-  if (status === "in_progress") return "in-progress";
-  if (status === "accepted") return "accepted";
-
-  return "pending";
-}
-
-
-function showToast(message, type = "success") {
-  const toast = $("toast");
-
-  if (!toast) {
-    console.log(message);
-    return;
-  }
-
-  const icon = $("toastIcon");
-  const text = $("toastMessage");
-
-  if (text) text.textContent = message;
-
-  if (icon) {
-    icon.textContent =
-      type === "error"
-        ? "✕"
-        : type === "warning"
-          ? "!"
-          : "✓";
-  }
-
-  toast.classList.add("show");
-
-  clearTimeout(window.__toastTimer);
-
-  window.__toastTimer = setTimeout(() => {
-    toast.classList.remove("show");
-  }, 3000);
-}
-
-
 function firebaseError(error) {
   console.error(error);
-
-  const code = error?.code || "";
 
   const messages = {
     "auth/email-already-in-use":
@@ -261,37 +106,208 @@ function firebaseError(error) {
   };
 
   return (
-    messages[code] ||
+    messages[error?.code] ||
     error?.message ||
     "Something went wrong. Please try again."
   );
 }
 
-
 function setMessage(id, message, type = "") {
-  const el = $(id);
+  const element = $(id);
 
-  if (!el) return;
+  if (!element) return;
 
-  el.textContent = message;
-
-  el.className = "";
+  element.textContent = message;
+  element.className = "";
 
   if (type) {
-    el.classList.add(type);
+    element.classList.add(type);
   }
 }
 
+function showToast(message, type = "success") {
+  const toast = $("toast");
 
-function closeModal(id) {
-  const modal = $(id);
+  if (!toast) return;
 
-  if (!modal) return;
+  const icon = $("toastIcon");
+  const text = $("toastMessage");
 
-  modal.classList.remove("show");
-  modal.style.display = "";
+  if (text) {
+    text.textContent = message;
+  }
+
+  if (icon) {
+    icon.textContent =
+      type === "error"
+        ? "✕"
+        : type === "warning"
+        ? "!"
+        : "✓";
+  }
+
+  toast.classList.add("show");
+
+  clearTimeout(window.__toastTimer);
+
+  window.__toastTimer = setTimeout(() => {
+    toast.classList.remove("show");
+  }, 3500);
 }
 
+// ============================================================
+// IMPORTANT STARTUP ERROR DISPLAY
+// ============================================================
+
+function showStartupError(error, where = "Application startup") {
+  console.error(where, error);
+
+  const message = firebaseError(error);
+
+  const authScreen = $("authScreen");
+  const mainApp = $("mainApp");
+
+  if (authScreen) {
+    authScreen.style.display = "";
+  }
+
+  if (mainApp) {
+    mainApp.style.display = "none";
+  }
+
+  if ($("loginPanel")) {
+    $("loginPanel").style.display = "";
+  }
+
+  if ($("registerPanel")) {
+    $("registerPanel").style.display = "none";
+  }
+
+  let box = $("startupErrorBox");
+
+  if (!box && authScreen) {
+    box = document.createElement("div");
+
+    box.id = "startupErrorBox";
+
+    box.style.cssText =
+      "margin:16px auto;" +
+      "max-width:520px;" +
+      "padding:16px;" +
+      "border-radius:12px;" +
+      "background:#fff0f0;" +
+      "color:#a40000;" +
+      "border:1px solid #ffcaca;" +
+      "font-family:inherit;" +
+      "line-height:1.5;" +
+      "white-space:pre-wrap;";
+
+    authScreen.appendChild(box);
+  }
+
+  if (box) {
+    box.innerHTML =
+      "<strong>Task Manager could not finish loading.</strong><br><br>" +
+      escapeHTML(message) +
+      "<br><br>" +
+      "<small>Where: " +
+      escapeHTML(where) +
+      "<br>Version: " +
+      escapeHTML(VERSION) +
+      "</small>";
+  }
+}
+
+function clearStartupError() {
+  const box = $("startupErrorBox");
+
+  if (box) {
+    box.remove();
+  }
+}
+
+// ============================================================
+// DATE HELPERS
+// ============================================================
+
+function formatDate(value) {
+  if (!value) return "—";
+
+  try {
+    const date =
+      value?.toDate
+        ? value.toDate()
+        : value instanceof Date
+        ? value
+        : new Date(value);
+
+    if (isNaN(date.getTime())) {
+      return "—";
+    }
+
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function formatDateTime(value) {
+  if (!value) return "—";
+
+  try {
+    const date =
+      value?.toDate
+        ? value.toDate()
+        : value instanceof Date
+        ? value
+        : new Date(value);
+
+    if (isNaN(date.getTime())) {
+      return "—";
+    }
+
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function getTaskDate(task) {
+  return task?.assignedAt || task?.createdAt || null;
+}
+
+function getStatusText(status) {
+  return (
+    {
+      pending: "Pending",
+      accepted: "Accepted",
+      in_progress: "In Progress",
+      completed: "Completed"
+    }[status] || "Pending"
+  );
+}
+
+function getStatusClass(status) {
+  if (status === "completed") return "completed";
+  if (status === "in_progress") return "in-progress";
+  if (status === "accepted") return "accepted";
+
+  return "pending";
+}
+
+// ============================================================
+// MODALS / NAVIGATION
+// ============================================================
 
 function openModal(id) {
   const modal = $(id);
@@ -302,39 +318,72 @@ function openModal(id) {
   modal.style.display = "flex";
 }
 
+function closeModal(id) {
+  const modal = $(id);
 
-// ============================================================
-// SIDEBAR / PAGE NAVIGATION
-// ============================================================
+  if (!modal) return;
+
+  modal.classList.remove("show");
+  modal.style.display = "";
+}
+
+function closeSidebarMobile() {
+  document.body.classList.remove("sidebar-open");
+
+  document
+    .querySelector(".sidebar")
+    ?.classList.remove("open");
+}
+
+function showLoginPanel() {
+  if ($("loginPanel")) {
+    $("loginPanel").style.display = "";
+  }
+
+  if ($("registerPanel")) {
+    $("registerPanel").style.display = "none";
+  }
+}
+
+function showRegisterPanel() {
+  if ($("loginPanel")) {
+    $("loginPanel").style.display = "none";
+  }
+
+  if ($("registerPanel")) {
+    $("registerPanel").style.display = "";
+  }
+}
 
 function showPage(page) {
   state.currentPage = page;
 
-  const pages = [
+  [
     "dashboardPage",
     "usersPage",
     "tasksPage",
     "progressPage",
     "profilePage"
-  ];
+  ].forEach(id => {
+    const element = $(id);
 
-  pages.forEach(id => {
-    const el = $(id);
+    if (!element) return;
 
-    if (!el) return;
+    const active = id === `${page}Page`;
 
-    const shouldShow = id === `${page}Page`;
+    element.style.display = active ? "" : "none";
 
-    el.style.display = shouldShow ? "" : "none";
-    el.classList.toggle("active", shouldShow);
+    element.classList.toggle("active", active);
   });
 
-  document.querySelectorAll("[data-page]").forEach(item => {
-    item.classList.toggle(
-      "active",
-      item.dataset.page === page
-    );
-  });
+  document
+    .querySelectorAll("[data-page]")
+    .forEach(item => {
+      item.classList.toggle(
+        "active",
+        item.dataset.page === page
+      );
+    });
 
   if (page === "dashboard") {
     updateDashboard();
@@ -358,47 +407,6 @@ function showPage(page) {
 
   closeSidebarMobile();
 }
-
-
-function closeSidebarMobile() {
-  document.body.classList.remove("sidebar-open");
-
-  const sidebar = document.querySelector(".sidebar");
-
-  if (sidebar) {
-    sidebar.classList.remove("open");
-  }
-}
-
-
-function setupNavigation() {
-  document.querySelectorAll("[data-page]").forEach(item => {
-    item.addEventListener("click", () => {
-      const page = item.dataset.page;
-
-      if (!page) return;
-
-      showPage(page);
-    });
-  });
-
-  const usersNav = $("usersNavItem");
-
-  if (usersNav) {
-    usersNav.addEventListener("click", () => {
-      showPage("users");
-    });
-  }
-
-  const progressNav = $("progressNavItem");
-
-  if (progressNav) {
-    progressNav.addEventListener("click", () => {
-      showPage("progress");
-    });
-  }
-}
-
 
 // ============================================================
 // AUTH
@@ -441,7 +449,6 @@ async function loginUser(event) {
   }
 }
 
-
 async function registerAdmin(event) {
   event.preventDefault();
 
@@ -451,7 +458,12 @@ async function registerAdmin(event) {
   const confirmPassword =
     $("registerConfirmPassword")?.value;
 
-  if (!name || !email || !password || !confirmPassword) {
+  if (
+    !name ||
+    !email ||
+    !password ||
+    !confirmPassword
+  ) {
     setMessage(
       "registerMessage",
       "Please fill in all fields.",
@@ -481,7 +493,10 @@ async function registerAdmin(event) {
     return;
   }
 
-  setMessage("registerMessage", "Creating account...");
+  setMessage(
+    "registerMessage",
+    "Creating account..."
+  );
 
   try {
     const credential =
@@ -516,9 +531,7 @@ async function registerAdmin(event) {
 
     showToast("Admin account created.");
 
-    if ($("registerForm")) {
-      $("registerForm").reset();
-    }
+    $("registerForm")?.reset();
 
     setTimeout(() => {
       showLoginPanel();
@@ -533,35 +546,6 @@ async function registerAdmin(event) {
   }
 }
 
-
-function showLoginPanel() {
-  const loginPanel = $("loginPanel");
-  const registerPanel = $("registerPanel");
-
-  if (loginPanel) {
-    loginPanel.style.display = "";
-  }
-
-  if (registerPanel) {
-    registerPanel.style.display = "none";
-  }
-}
-
-
-function showRegisterPanel() {
-  const loginPanel = $("loginPanel");
-  const registerPanel = $("registerPanel");
-
-  if (loginPanel) {
-    loginPanel.style.display = "none";
-  }
-
-  if (registerPanel) {
-    registerPanel.style.display = "";
-  }
-}
-
-
 async function logoutUser() {
   try {
     await signOut(auth);
@@ -570,40 +554,41 @@ async function logoutUser() {
   }
 }
 
-
 // ============================================================
 // PROFILE
 // ============================================================
 
 async function loadProfile() {
-  if (!state.user) return;
+  if (!state.user) {
+    throw new Error(
+      "No signed-in Firebase user was found."
+    );
+  }
 
-  const profileRef = doc(
-    db,
-    "users",
-    state.user.uid
+  const snapshot = await getDoc(
+    doc(db, "users", state.user.uid)
   );
 
-  const snapshot = await getDoc(profileRef);
-
-  if (snapshot.exists()) {
+  if (!snapshot.exists()) {
+    state.profile = {
+      uid: state.user.uid,
+      name:
+        state.user.displayName || "User",
+      email:
+        state.user.email || "",
+      role: "student",
+      active: true
+    };
+  } else {
     state.profile = {
       id: snapshot.id,
       ...snapshot.data()
     };
-  } else {
-    state.profile = {
-      uid: state.user.uid,
-      name: state.user.displayName || "User",
-      email: state.user.email || "",
-      role: "student",
-      active: true
-    };
   }
 
   updateUserUI();
+  updateAvatar();
 }
-
 
 function updateUserUI() {
   const profile = state.profile || {};
@@ -628,83 +613,94 @@ function updateUserUI() {
     role.charAt(0).toUpperCase() +
     role.slice(1);
 
-  document.querySelectorAll(
-    "[data-user-name]"
-  ).forEach(el => {
-    el.textContent = name;
-  });
+  document
+    .querySelectorAll("[data-user-name]")
+    .forEach(el => {
+      el.textContent = name;
+    });
 
-  document.querySelectorAll(
-    "[data-user-email]"
-  ).forEach(el => {
-    el.textContent = email;
-  });
+  document
+    .querySelectorAll("[data-user-email]")
+    .forEach(el => {
+      el.textContent = email;
+    });
 
-  document.querySelectorAll(
-    "[data-user-role]"
-  ).forEach(el => {
-    el.textContent = roleText;
-  });
+  document
+    .querySelectorAll("[data-user-role]")
+    .forEach(el => {
+      el.textContent = roleText;
+    });
 
-  const nameIds = [
+  [
     "headerUserName",
     "sidebarName",
     "profileName",
     "profileNameDetail"
-  ];
-
-  nameIds.forEach(id => {
-    const el = $(id);
-
-    if (el) el.textContent = name;
+  ].forEach(id => {
+    if ($(id)) {
+      $(id).textContent = name;
+    }
   });
 
-  const roleIds = [
+  [
     "headerUserRole",
     "sidebarRole",
     "profileRole",
     "profileRoleDetail"
-  ];
-
-  roleIds.forEach(id => {
-    const el = $(id);
-
-    if (el) el.textContent = roleText;
+  ].forEach(id => {
+    if ($(id)) {
+      $(id).textContent = roleText;
+    }
   });
 
-  const emailEl = $("profileEmail");
-
-  if (emailEl) {
-    emailEl.textContent = email;
+  if ($("profileEmail")) {
+    $("profileEmail").textContent = email;
   }
 
-  const statusEl = $("profileStatus");
-
-  if (statusEl) {
-    statusEl.textContent =
+  if ($("profileStatus")) {
+    $("profileStatus").textContent =
       profile.active === false
         ? "Inactive"
         : "Active";
   }
 
-  const versionEls =
-    document.querySelectorAll(
-      "#appVersion, [data-app-version]"
-    );
-
-  versionEls.forEach(el => {
-    el.textContent = `Task Manager ${VERSION}`;
-  });
+  document
+    .querySelectorAll(
+      "#appVersion,[data-app-version]"
+    )
+    .forEach(el => {
+      el.textContent =
+        `Task Manager ${VERSION}`;
+    });
 }
-
 
 function renderProfile() {
   updateUserUI();
+  updateAvatar();
 }
 
+function updateAvatar() {
+  const name =
+    state.profile?.name ||
+    state.user?.displayName ||
+    state.user?.email ||
+    "U";
+
+  const letter =
+    name.charAt(0).toUpperCase();
+
+  [
+    "sidebarAvatar",
+    "profileAvatar"
+  ].forEach(id => {
+    if ($(id)) {
+      $(id).textContent = letter;
+    }
+  });
+}
 
 // ============================================================
-// LOAD USERS
+// USERS
 // ============================================================
 
 async function loadUsers() {
@@ -715,26 +711,22 @@ async function loadUsers() {
       state.profile.role === "admin" ||
       state.profile.role === "superadmin"
     ) {
-      const usersQuery = query(
-        collection(db, "users"),
-        where("role", "==", "student")
+      const snapshot = await getDocs(
+        query(
+          collection(db, "users"),
+          where("role", "==", "student")
+        )
       );
 
-      const snapshot = await getDocs(usersQuery);
-
-      state.users = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
-
+      state.users =
+        snapshot.docs.map(docItem => ({
+          id: docItem.id,
+          ...docItem.data()
+        }));
     } else {
-      const ownRef = doc(
-        db,
-        "users",
-        state.user.uid
+      const snapshot = await getDoc(
+        doc(db, "users", state.user.uid)
       );
-
-      const snapshot = await getDoc(ownRef);
 
       state.users = snapshot.exists()
         ? [
@@ -750,19 +742,19 @@ async function loadUsers() {
     populateTaskUsers();
 
   } catch (error) {
-    console.error("loadUsers:", error);
+    showStartupError(
+      error,
+      "Loading users"
+    );
 
     showToast(
       firebaseError(error),
       "error"
     );
+
+    throw error;
   }
 }
-
-
-// ============================================================
-// RENDER USERS
-// ============================================================
 
 function renderUsers() {
   const container =
@@ -772,129 +764,155 @@ function renderUsers() {
   if (!container) return;
 
   if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
+    !["admin", "superadmin"]
+      .includes(state.profile?.role)
   ) {
-    container.innerHTML = `
-      <div class="empty-state">
+    container.innerHTML =
+      `<div class="empty-state">
         <p>User management is available to administrators.</p>
-      </div>
-    `;
+      </div>`;
 
     return;
   }
 
   if (!state.users.length) {
-    container.innerHTML = `
-      <div class="empty-state">
+    container.innerHTML =
+      `<div class="empty-state">
         <p>No students found.</p>
-      </div>
-    `;
+      </div>`;
 
     return;
   }
 
-  container.innerHTML = state.users.map(user => {
+  container.innerHTML =
+    state.users
+      .map(user => {
+        const id =
+          user.uid ||
+          user.id;
 
-    const userTasks =
-      state.tasks.filter(
-        task => task.assignedTo === user.uid
-      );
+        const userTasks =
+          state.tasks.filter(
+            task =>
+              task.assignedTo === id
+          );
 
-    const completed =
-      userTasks.filter(
-        task => task.status === "completed"
-      ).length;
+        const completed =
+          userTasks.filter(
+            task =>
+              task.status === "completed"
+          ).length;
 
-    const total = userTasks.length;
+        const total =
+          userTasks.length;
 
-    const percentage =
-      total > 0
-        ? Math.round((completed / total) * 100)
-        : 0;
+        const percentage =
+          total
+            ? Math.round(
+                completed /
+                  total *
+                  100
+              )
+            : 0;
 
-    return `
-      <div class="user-card" data-student-id="${escapeHTML(user.uid || user.id)}">
+        return `
+        <div
+          class="user-card"
+          data-student-id="${escapeHTML(id)}"
+        >
 
-        <div class="user-card-main">
+          <div class="user-card-main">
 
-          <div class="user-avatar">
-            ${escapeHTML(
-              (user.name || "S").charAt(0).toUpperCase()
-            )}
+            <div class="user-avatar">
+              ${escapeHTML(
+                (user.name || "S")
+                  .charAt(0)
+                  .toUpperCase()
+              )}
+            </div>
+
+            <div class="user-info">
+              <h3>
+                ${escapeHTML(
+                  user.name || "Student"
+                )}
+              </h3>
+
+              <p>
+                ${escapeHTML(
+                  user.email || ""
+                )}
+              </p>
+
+              <span class="user-role">
+                Student
+              </span>
+            </div>
+
           </div>
 
-          <div class="user-info">
-            <h3>${escapeHTML(user.name || "Student")}</h3>
+          <div class="user-progress">
 
-            <p>${escapeHTML(user.email || "")}</p>
+            <div class="progress-top">
+              <span>Progress</span>
+              <strong>
+                ${percentage}%
+              </strong>
+            </div>
 
-            <span class="user-role">
-              Student
-            </span>
+            <div class="progress-bar">
+              <div
+                class="progress-fill"
+                style="width:${percentage}%"
+              ></div>
+            </div>
+
+            <small>
+              ${completed}
+              of
+              ${total}
+              tasks completed
+            </small>
+
+          </div>
+
+          <div class="user-meta">
+            <small>
+              Created by:
+              ${escapeHTML(
+                user.createdByName || "—"
+              )}
+            </small>
           </div>
 
         </div>
-
-        <div class="user-progress">
-
-          <div class="progress-top">
-            <span>Progress</span>
-            <strong>${percentage}%</strong>
-          </div>
-
-          <div class="progress-bar">
-            <div
-              class="progress-fill"
-              style="width:${percentage}%"
-            ></div>
-          </div>
-
-          <small>
-            ${completed} of ${total} tasks completed
-          </small>
-
-        </div>
-
-        <div class="user-meta">
-          <small>
-            Created by:
-            ${escapeHTML(user.createdByName || "—")}
-          </small>
-        </div>
-
-      </div>
-    `;
-  }).join("");
+        `;
+      })
+      .join("");
 
   container
-    .querySelectorAll("[data-student-id]")
+    .querySelectorAll(
+      "[data-student-id]"
+    )
     .forEach(card => {
+      card.addEventListener(
+        "click",
+        () => {
+          state.selectedStudentId =
+            card.dataset.studentId;
 
-      card.addEventListener("click", () => {
-
-        const studentId =
-          card.dataset.studentId;
-
-        state.selectedStudentId =
-          studentId;
-
-        showPage("progress");
-      });
+          showPage("progress");
+        }
+      );
     });
 }
-
-
-// ============================================================
-// CREATE STUDENT
-// ============================================================
 
 async function createUser(event) {
   event.preventDefault();
 
   if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
+    !["admin", "superadmin"]
+      .includes(state.profile?.role)
   ) {
     setMessage(
       "userMessage",
@@ -943,21 +961,15 @@ async function createUser(event) {
   let secondaryAuth = null;
 
   try {
+    const existing =
+      await getDocs(
+        query(
+          collection(db, "users"),
+          where("email", "==", email)
+        )
+      );
 
-    // --------------------------------------------------------
-    // CHECK EXISTING STUDENT
-    // --------------------------------------------------------
-
-    const existingQuery = query(
-      collection(db, "users"),
-      where("email", "==", email)
-    );
-
-    const existingSnapshot =
-      await getDocs(existingQuery);
-
-    if (!existingSnapshot.empty) {
-
+    if (!existing.empty) {
       setMessage(
         "userMessage",
         "A user with this email already exists.",
@@ -967,17 +979,9 @@ async function createUser(event) {
       return;
     }
 
-
-    // --------------------------------------------------------
-    // SECONDARY FIREBASE APP
-    // --------------------------------------------------------
-
-    const firebaseConfig =
-      app.options;
-
     secondaryApp =
       initializeSecondaryApp(
-        firebaseConfig,
+        app.options,
         `SecondaryApp-${Date.now()}`
       );
 
@@ -985,11 +989,6 @@ async function createUser(event) {
       getSecondaryAuth(
         secondaryApp
       );
-
-
-    // --------------------------------------------------------
-    // CREATE AUTH USER
-    // --------------------------------------------------------
 
     const credential =
       await createSecondaryUser(
@@ -1001,11 +1000,6 @@ async function createUser(event) {
     const student =
       credential.user;
 
-
-    // --------------------------------------------------------
-    // UPDATE DISPLAY NAME
-    // --------------------------------------------------------
-
     await updateSecondaryProfile(
       student,
       {
@@ -1013,13 +1007,12 @@ async function createUser(event) {
       }
     );
 
-
-    // --------------------------------------------------------
-    // CREATE FIRESTORE PROFILE
-    // --------------------------------------------------------
-
     await setDoc(
-      doc(db, "users", student.uid),
+      doc(
+        db,
+        "users",
+        student.uid
+      ),
       {
         uid: student.uid,
         name,
@@ -1040,17 +1033,11 @@ async function createUser(event) {
       }
     );
 
-
-    // --------------------------------------------------------
-    // CLEAN SECONDARY AUTH
-    // --------------------------------------------------------
-
     try {
       await signOutSecondary(
         secondaryAuth
       );
     } catch {}
-
 
     await deleteApp(
       secondaryApp
@@ -1058,18 +1045,11 @@ async function createUser(event) {
 
     secondaryApp = null;
 
-
-    // --------------------------------------------------------
-    // REFRESH
-    // --------------------------------------------------------
-
     await loadUsers();
 
     closeModal("userModal");
 
-    if ($("userForm")) {
-      $("userForm").reset();
-    }
+    $("userForm")?.reset();
 
     setMessage(
       "userMessage",
@@ -1081,12 +1061,6 @@ async function createUser(event) {
     );
 
   } catch (error) {
-
-    console.error(
-      "createUser:",
-      error
-    );
-
     if (secondaryApp) {
       try {
         await deleteApp(
@@ -1103,93 +1077,85 @@ async function createUser(event) {
   }
 }
 
-
 // ============================================================
-// LOAD TASKS
+// TASKS
 // ============================================================
 
 async function loadTasks() {
   if (!state.profile) return;
 
   try {
-
     if (
       state.profile.role === "admin" ||
       state.profile.role === "superadmin"
     ) {
-
       try {
-
-        const tasksQuery = query(
-          collection(db, "tasks"),
-          orderBy("assignedAt", "desc")
-        );
-
         const snapshot =
-          await getDocs(tasksQuery);
+          await getDocs(
+            query(
+              collection(db, "tasks"),
+              orderBy(
+                "assignedAt",
+                "desc"
+              )
+            )
+          );
 
         state.tasks =
-          snapshot.docs.map(docSnap => ({
-            id: docSnap.id,
-            ...docSnap.data()
-          }));
+          snapshot.docs.map(
+            docItem => ({
+              id: docItem.id,
+              ...docItem.data()
+            })
+          );
 
-      } catch (indexError) {
-
-        console.warn(
-          "Ordered task query failed. Loading without order.",
-          indexError
-        );
-
+      } catch {
         const snapshot =
           await getDocs(
             collection(db, "tasks")
           );
 
         state.tasks =
-          snapshot.docs.map(docSnap => ({
-            id: docSnap.id,
-            ...docSnap.data()
-          }));
+          snapshot.docs.map(
+            docItem => ({
+              id: docItem.id,
+              ...docItem.data()
+            })
+          );
 
         state.tasks.sort(
           (a, b) =>
-            getTaskDate(b)?.toMillis?.() -
-              getTaskDate(a)?.toMillis?.() || 0
+            (b.assignedAt?.toMillis?.() || 0) -
+            (a.assignedAt?.toMillis?.() || 0)
         );
       }
 
     } else {
 
-      const tasksQuery = query(
-        collection(db, "tasks"),
-        where(
-          "assignedTo",
-          "==",
-          state.user.uid
-        )
-      );
-
       const snapshot =
-        await getDocs(tasksQuery);
+        await getDocs(
+          query(
+            collection(db, "tasks"),
+            where(
+              "assignedTo",
+              "==",
+              state.user.uid
+            )
+          )
+        );
 
       state.tasks =
-        snapshot.docs.map(docSnap => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        }));
+        snapshot.docs.map(
+          docItem => ({
+            id: docItem.id,
+            ...docItem.data()
+          })
+        );
 
       state.tasks.sort(
-        (a, b) => {
-
-          const aDate =
-            getTaskDate(a)?.toMillis?.() || 0;
-
-          const bDate =
-            getTaskDate(b)?.toMillis?.() || 0;
-
-          return bDate - aDate;
-        }
+        (a, b) =>
+          (b.assignedAt?.toMillis?.() || 0) -
+          (a.assignedAt?.toMillis?.() || 0)
       );
     }
 
@@ -1200,70 +1166,66 @@ async function loadTasks() {
     renderUsers();
 
   } catch (error) {
-
-    console.error(
-      "loadTasks:",
-      error
+    showStartupError(
+      error,
+      "Loading tasks"
     );
 
     showToast(
       firebaseError(error),
       "error"
     );
+
+    throw error;
   }
 }
 
-
-// ============================================================
-// TASK USER DROPDOWN
-// ============================================================
-
 function populateTaskUsers() {
-  const select = $("taskUser");
+  const select =
+    $("taskUser");
 
   if (!select) return;
 
-  const currentValue =
+  const oldValue =
     select.value;
 
-  select.innerHTML = `
-    <option value="">
+  select.innerHTML =
+    `<option value="">
       Select student
-    </option>
-  `;
+    </option>`;
 
   state.users.forEach(user => {
-
     const option =
-      document.createElement("option");
+      document.createElement(
+        "option"
+      );
 
     option.value =
-      user.uid || user.id;
+      user.uid ||
+      user.id;
 
     option.textContent =
       user.name ||
       user.email ||
       "Student";
 
-    select.appendChild(option);
+    select.appendChild(
+      option
+    );
   });
 
-  if (currentValue) {
-    select.value = currentValue;
+  if (oldValue) {
+    select.value =
+      oldValue;
   }
 }
-
-
-// ============================================================
-// CREATE TASK
-// ============================================================
 
 async function createTask(event) {
   event.preventDefault();
 
   if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
+    !["admin", "superadmin"]
+      .includes(state.profile?.role)
   ) {
     setMessage(
       "taskMessage",
@@ -1284,7 +1246,8 @@ async function createTask(event) {
     $("taskUser")?.value;
 
   const dueDate =
-    $("taskDueDate")?.value || null;
+    $("taskDueDate")?.value ||
+    null;
 
   if (!title || !assignedTo) {
     setMessage(
@@ -1319,7 +1282,6 @@ async function createTask(event) {
   );
 
   try {
-
     const adminName =
       state.profile?.name ||
       state.user?.displayName ||
@@ -1370,9 +1332,7 @@ async function createTask(event) {
 
     closeModal("taskModal");
 
-    if ($("taskForm")) {
-      $("taskForm").reset();
-    }
+    $("taskForm")?.reset();
 
     setMessage(
       "taskMessage",
@@ -1386,12 +1346,6 @@ async function createTask(event) {
     );
 
   } catch (error) {
-
-    console.error(
-      "createTask:",
-      error
-    );
-
     setMessage(
       "taskMessage",
       firebaseError(error),
@@ -1400,13 +1354,11 @@ async function createTask(event) {
   }
 }
 
-
 // ============================================================
-// TASK CARD HTML
+// TASK CARD
 // ============================================================
 
-function taskCardHTML(task, options = {}) {
-
+function taskCardHTML(task) {
   const role =
     state.profile?.role;
 
@@ -1418,7 +1370,8 @@ function taskCardHTML(task, options = {}) {
     role === "superadmin";
 
   const status =
-    task.status || "pending";
+    task.status ||
+    "pending";
 
   const assignedBy =
     task.assignedByName ||
@@ -1475,7 +1428,6 @@ function taskCardHTML(task, options = {}) {
   }
 
   if (canManage) {
-
     buttons.push(`
       <button
         class="task-action-btn danger"
@@ -1496,13 +1448,20 @@ function taskCardHTML(task, options = {}) {
       <div class="task-card-header">
 
         <div>
+
           <h3>
-            ${escapeHTML(task.title || "Untitled Task")}
+            ${escapeHTML(
+              task.title ||
+              "Untitled Task"
+            )}
           </h3>
 
-          <span class="task-status ${getStatusClass(status)}">
+          <span
+            class="task-status ${getStatusClass(status)}"
+          >
             ${getStatusText(status)}
           </span>
+
         </div>
 
       </div>
@@ -1511,7 +1470,9 @@ function taskCardHTML(task, options = {}) {
         task.description
           ? `
             <p class="task-description">
-              ${escapeHTML(task.description)}
+              ${escapeHTML(
+                task.description
+              )}
             </p>
           `
           : ""
@@ -1523,36 +1484,61 @@ function taskCardHTML(task, options = {}) {
           isStudent
             ? `
               <div>
-                <small>Assigned by</small>
+                <small>
+                  Assigned by
+                </small>
+
                 <strong>
-                  ${escapeHTML(assignedBy)}
+                  ${escapeHTML(
+                    assignedBy
+                  )}
                 </strong>
               </div>
             `
             : `
               <div>
-                <small>Student</small>
+                <small>
+                  Student
+                </small>
+
                 <strong>
-                  ${escapeHTML(studentName)}
+                  ${escapeHTML(
+                    studentName
+                  )}
                 </strong>
               </div>
 
               <div>
-                <small>Assigned by</small>
+                <small>
+                  Assigned by
+                </small>
+
                 <strong>
-                  ${escapeHTML(assignedBy)}
+                  ${escapeHTML(
+                    assignedBy
+                  )}
                 </strong>
               </div>
             `
         }
 
         <div>
-          <small>Due date</small>
-          <strong>${escapeHTML(due)}</strong>
+          <small>
+            Due date
+          </small>
+
+          <strong>
+            ${escapeHTML(
+              due
+            )}
+          </strong>
         </div>
 
         <div>
-          <small>Assigned</small>
+          <small>
+            Assigned
+          </small>
+
           <strong>
             ${escapeHTML(
               formatDateTime(
@@ -1578,13 +1564,7 @@ function taskCardHTML(task, options = {}) {
   `;
 }
 
-
-// ============================================================
-// RENDER TASKS
-// ============================================================
-
 function renderTasks() {
-
   const container =
     $("allTasksContainer") ||
     $("tasksList");
@@ -1595,62 +1575,61 @@ function renderTasks() {
     [...state.tasks];
 
   const search =
-    $("taskSearch")?.value
+    $("taskSearch")
+      ?.value
       .trim()
       .toLowerCase() || "";
 
   const filter =
-    $("taskStatusFilter")?.value || "all";
+    $("taskStatusFilter")
+      ?.value ||
+    "all";
 
   if (search) {
-    tasks = tasks.filter(task => {
-
-      const text = [
-        task.title,
-        task.description,
-        task.assignedToName,
-        task.assignedByName
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return text.includes(search);
-    });
+    tasks =
+      tasks.filter(task =>
+        [
+          task.title,
+          task.description,
+          task.assignedToName,
+          task.assignedByName
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(search)
+      );
   }
 
   if (filter !== "all") {
-    tasks = tasks.filter(
-      task =>
-        (task.status || "pending") === filter
-    );
+    tasks =
+      tasks.filter(
+        task =>
+          (task.status ||
+            "pending") ===
+          filter
+      );
   }
 
   if (!tasks.length) {
-
-    container.innerHTML = `
-      <div class="empty-state">
+    container.innerHTML =
+      `<div class="empty-state">
         <p>No tasks found.</p>
-      </div>
-    `;
+      </div>`;
 
     return;
   }
 
   container.innerHTML =
-    tasks.map(task =>
-      taskCardHTML(task)
-    ).join("");
+    tasks
+      .map(taskCardHTML)
+      .join("");
 
-  attachTaskActions(container);
+  attachTaskActions(
+    container
+  );
 }
 
-
-// ============================================================
-// RECENT TASKS
-// ============================================================
-
 function renderRecentTasks() {
-
   const container =
     $("recentTasksContainer") ||
     $("recentTasks");
@@ -1659,49 +1638,39 @@ function renderRecentTasks() {
 
   const recent =
     [...state.tasks]
-      .sort((a, b) => {
-
-        const aTime =
-          getTaskDate(a)?.toMillis?.() || 0;
-
-        const bTime =
-          getTaskDate(b)?.toMillis?.() || 0;
-
-        return bTime - aTime;
-      })
+      .sort(
+        (a, b) =>
+          (b.assignedAt?.toMillis?.() || 0) -
+          (a.assignedAt?.toMillis?.() || 0)
+      )
       .slice(0, 5);
 
   if (!recent.length) {
-
-    container.innerHTML = `
-      <div class="empty-state">
+    container.innerHTML =
+      `<div class="empty-state">
         <p>No recent tasks.</p>
-      </div>
-    `;
+      </div>`;
 
     return;
   }
 
   container.innerHTML =
-    recent.map(task =>
-      taskCardHTML(
-        task,
-        { recent: true }
-      )
-    ).join("");
+    recent
+      .map(taskCardHTML)
+      .join("");
 
-  attachTaskActions(container);
+  attachTaskActions(
+    container
+  );
 }
 
-
-// ============================================================
-// TASK ACTIONS
-// ============================================================
-
-function attachTaskActions(container) {
-
+function attachTaskActions(
   container
-    .querySelectorAll("[data-task-action]")
+) {
+  container
+    .querySelectorAll(
+      "[data-task-action]"
+    )
     .forEach(button => {
 
       button.addEventListener(
@@ -1711,32 +1680,27 @@ function attachTaskActions(container) {
           event.preventDefault();
           event.stopPropagation();
 
-          const action =
-            button.dataset.taskAction;
-
-          const taskId =
-            button.dataset.taskId;
-
-          if (!taskId) return;
-
           await handleTaskAction(
-            action,
-            taskId
+            button.dataset.taskAction,
+            button.dataset.taskId
           );
         }
       );
     });
 }
 
+// ============================================================
+// TASK ACTIONS
+// ============================================================
 
 async function handleTaskAction(
   action,
   taskId
 ) {
-
   const task =
     state.tasks.find(
-      item => item.id === taskId
+      item =>
+        item.id === taskId
     );
 
   if (!task) {
@@ -1748,107 +1712,80 @@ async function handleTaskAction(
     return;
   }
 
-  const now =
-    serverTimestamp();
+  const role =
+    state.profile?.role;
+
+  if (
+    role === "student" &&
+    task.assignedTo !==
+      state.user.uid
+  ) {
+    showToast(
+      "This task is not assigned to you.",
+      "error"
+    );
+
+    return;
+  }
 
   const updates = {};
 
-
-  // ----------------------------------------------------------
-  // STUDENT ACCEPT
-  // ----------------------------------------------------------
-
   if (
     action === "accept" &&
-    state.profile?.role === "student"
+    role === "student"
   ) {
+    updates.status =
+      "accepted";
 
-    if (task.assignedTo !== state.user.uid) {
-      showToast(
-        "This task is not assigned to you.",
-        "error"
-      );
+    updates.acceptedAt =
+      serverTimestamp();
 
-      return;
-    }
-
-    updates.status = "accepted";
-    updates.acceptedAt = now;
-  }
-
-
-  // ----------------------------------------------------------
-  // STUDENT START
-  // ----------------------------------------------------------
-
-  else if (
+  } else if (
     action === "start" &&
-    state.profile?.role === "student"
+    role === "student"
   ) {
+    updates.status =
+      "in_progress";
 
-    if (task.assignedTo !== state.user.uid) {
-      showToast(
-        "This task is not assigned to you.",
-        "error"
-      );
+    updates.startedAt =
+      serverTimestamp();
 
-      return;
-    }
-
-    updates.status = "in_progress";
-    updates.startedAt = now;
-  }
-
-
-  // ----------------------------------------------------------
-  // STUDENT COMPLETE
-  // ----------------------------------------------------------
-
-  else if (
+  } else if (
     action === "complete" &&
-    state.profile?.role === "student"
+    role === "student"
   ) {
+    updates.status =
+      "completed";
 
-    if (task.assignedTo !== state.user.uid) {
-      showToast(
-        "This task is not assigned to you.",
-        "error"
-      );
-
-      return;
-    }
-
-    updates.status = "completed";
-    updates.completedAt = now;
+    updates.completedAt =
+      serverTimestamp();
 
     const started =
-      task.startedAt?.toMillis?.() || 0;
+      task.startedAt
+        ?.toMillis?.() ||
+      0;
 
     if (started) {
       updates.durationMs =
         Math.max(
           0,
-          Date.now() - started
+          Date.now() -
+            started
         );
     }
-  }
 
-
-  // ----------------------------------------------------------
-  // DELETE
-  // ----------------------------------------------------------
-
-  else if (
+  } else if (
     action === "delete" &&
     (
-      state.profile?.role === "admin" ||
-      state.profile?.role === "superadmin"
+      role === "admin" ||
+      role === "superadmin"
     )
   ) {
 
     if (
-      state.profile.role === "admin" &&
-      task.assignedBy !== state.user.uid
+      role === "admin" &&
+      task.assignedBy !==
+        state.user.uid
     ) {
       showToast(
         "You can only delete tasks assigned by you.",
@@ -1858,22 +1795,27 @@ async function handleTaskAction(
       return;
     }
 
-    const confirmed =
-      window.confirm(
+    if (
+      !window.confirm(
         "Delete this task?"
-      );
-
-    if (!confirmed) return;
+      )
+    ) {
+      return;
+    }
 
     try {
-
       await deleteDoc(
-        doc(db, "tasks", taskId)
+        doc(
+          db,
+          "tasks",
+          taskId
+        )
       );
 
       state.tasks =
         state.tasks.filter(
-          item => item.id !== taskId
+          item =>
+            item.id !== taskId
         );
 
       renderTasks();
@@ -1886,7 +1828,6 @@ async function handleTaskAction(
       );
 
     } catch (error) {
-
       showToast(
         firebaseError(error),
         "error"
@@ -1894,15 +1835,8 @@ async function handleTaskAction(
     }
 
     return;
-  }
 
-
-  // ----------------------------------------------------------
-  // INVALID ACTION
-  // ----------------------------------------------------------
-
-  else {
-
+  } else {
     showToast(
       "You cannot perform this action.",
       "error"
@@ -1911,15 +1845,13 @@ async function handleTaskAction(
     return;
   }
 
-
-  // ----------------------------------------------------------
-  // UPDATE TASK
-  // ----------------------------------------------------------
-
   try {
-
     await updateDoc(
-      doc(db, "tasks", taskId),
+      doc(
+        db,
+        "tasks",
+        taskId
+      ),
       updates
     );
 
@@ -1929,19 +1861,13 @@ async function handleTaskAction(
       action === "accept"
         ? "Task accepted."
         : action === "start"
-          ? "Task started."
-          : action === "complete"
-            ? "Task completed."
-            : "Task updated."
+        ? "Task started."
+        : action === "complete"
+        ? "Task completed."
+        : "Task updated."
     );
 
   } catch (error) {
-
-    console.error(
-      "handleTaskAction:",
-      error
-    );
-
     showToast(
       firebaseError(error),
       "error"
@@ -1949,13 +1875,11 @@ async function handleTaskAction(
   }
 }
 
-
 // ============================================================
 // DASHBOARD
 // ============================================================
 
 function updateDashboard() {
-
   const tasks =
     state.tasks || [];
 
@@ -1965,32 +1889,35 @@ function updateDashboard() {
   const completed =
     tasks.filter(
       task =>
-        task.status === "completed"
+        task.status ===
+        "completed"
     ).length;
 
   const pending =
     tasks.filter(
       task =>
         !task.status ||
-        task.status === "pending"
+        task.status ===
+          "pending"
     ).length;
 
   const inProgress =
     tasks.filter(
       task =>
-        task.status === "in_progress" ||
-        task.status === "accepted"
+        task.status ===
+          "in_progress" ||
+        task.status ===
+          "accepted"
     ).length;
 
   const percentage =
-    total > 0
+    total
       ? Math.round(
-          (completed / total) * 100
+          completed /
+            total *
+            100
         )
       : 0;
-
-
-  // New HTML IDs
 
   const values = {
     statTotalTasks: total,
@@ -2001,89 +1928,58 @@ function updateDashboard() {
     totalTasks: total,
     pendingTasks: pending,
     activeTasks: inProgress,
-    completedTasks: completed
+    completedTasks: completed,
+
+    totalUsers:
+      state.users.length
   };
 
-  Object.entries(values)
-    .forEach(([id, value]) => {
-
-      const el = $(id);
-
-      if (el) {
-        el.textContent = value;
+  Object.entries(
+    values
+  ).forEach(
+    ([id, value]) => {
+      if ($(id)) {
+        $(id).textContent =
+          value;
       }
-    });
+    }
+  );
 
-
-  // Greeting
-
-  const greeting =
-    $("dashboardGreeting");
-
-  if (greeting) {
-
-    const name =
-      state.profile?.name ||
-      state.user?.displayName ||
-      "User";
-
-    greeting.textContent =
-      `Welcome back, ${name}!`;
+  if ($("dashboardGreeting")) {
+    $("dashboardGreeting")
+      .textContent =
+      `Welcome back, ${
+        state.profile?.name ||
+        state.user?.displayName ||
+        "User"
+      }!`;
   }
 
-
-  // Overview percentage
-
-  const overviewPercentage =
-    $("overviewPercentage");
-
-  if (overviewPercentage) {
-    overviewPercentage.textContent =
+  if ($("overviewPercentage")) {
+    $("overviewPercentage")
+      .textContent =
       `${percentage}%`;
   }
 
-
-  // Overview progress bar
-
-  const overviewProgress =
-    $("overviewProgress");
-
-  if (overviewProgress) {
-
-    if (
-      overviewProgress.style &&
-      overviewProgress.style.setProperty
-    ) {
-      overviewProgress.style.setProperty(
-        "width",
-        `${percentage}%`
-      );
-    }
-  }
-
-
-  // Total users
-
-  const totalUsers =
-    $("totalUsers");
-
-  if (totalUsers) {
-    totalUsers.textContent =
-      state.users.length;
+  if ($("overviewProgress")) {
+    $("overviewProgress")
+      .style.width =
+      `${percentage}%`;
   }
 }
-
 
 // ============================================================
 // PROGRESS
 // ============================================================
 
-function calculateStudentProgress(studentId) {
-
+function calculateStudentProgress(
+  studentId
+) {
   const tasks =
     state.tasks.filter(
       task =>
-        task.assignedTo === studentId
+        task.assignedTo ===
+        studentId
     );
 
   const total =
@@ -2092,27 +1988,33 @@ function calculateStudentProgress(studentId) {
   const completed =
     tasks.filter(
       task =>
-        task.status === "completed"
+        task.status ===
+        "completed"
     ).length;
 
   const inProgress =
     tasks.filter(
       task =>
-        task.status === "in_progress" ||
-        task.status === "accepted"
+        task.status ===
+          "in_progress" ||
+        task.status ===
+          "accepted"
     ).length;
 
   const pending =
     tasks.filter(
       task =>
         !task.status ||
-        task.status === "pending"
+        task.status ===
+          "pending"
     ).length;
 
   const percentage =
-    total > 0
+    total
       ? Math.round(
-          (completed / total) * 100
+          completed /
+            total *
+            100
         )
       : 0;
 
@@ -2125,9 +2027,75 @@ function calculateStudentProgress(studentId) {
   };
 }
 
+function buildStudentOwnProgress() {
+  const progress =
+    calculateStudentProgress(
+      state.user.uid
+    );
+
+  return `
+    <div class="progress-detail-card">
+
+      <h3>
+        My Progress
+      </h3>
+
+      <div class="progress-stat-grid">
+
+        <div>
+          <strong>
+            ${progress.total}
+          </strong>
+          <span>
+            Total
+          </span>
+        </div>
+
+        <div>
+          <strong>
+            ${progress.completed}
+          </strong>
+          <span>
+            Completed
+          </span>
+        </div>
+
+        <div>
+          <strong>
+            ${progress.inProgress}
+          </strong>
+          <span>
+            Active
+          </span>
+        </div>
+
+        <div>
+          <strong>
+            ${progress.pending}
+          </strong>
+          <span>
+            Pending
+          </span>
+        </div>
+
+      </div>
+
+      <div class="progress-bar">
+        <div
+          class="progress-fill"
+          style="width:${progress.percentage}%"
+        ></div>
+      </div>
+
+      <div class="progress-percent">
+        ${progress.percentage}% completed
+      </div>
+
+    </div>
+  `;
+}
 
 function renderProgress() {
-
   const container =
     $("progressContainer") ||
     $("allStudentsProgress");
@@ -2136,25 +2104,19 @@ function renderProgress() {
     $("progressSummary") ||
     $("individualProgress");
 
-
-  // ----------------------------------------------------------
-  // SELECTED STUDENT
-  // ----------------------------------------------------------
-
   if (
     state.selectedStudentId &&
     summary
   ) {
-
     const student =
       state.users.find(
         user =>
-          (user.uid || user.id) ===
+          (user.uid ||
+            user.id) ===
           state.selectedStudentId
       );
 
     if (student) {
-
       const progress =
         calculateStudentProgress(
           state.selectedStudentId
@@ -2167,7 +2129,10 @@ function renderProgress() {
 
             <div class="user-avatar">
               ${escapeHTML(
-                (student.name || "S")
+                (
+                  student.name ||
+                  "S"
+                )
                   .charAt(0)
                   .toUpperCase()
               )}
@@ -2176,13 +2141,15 @@ function renderProgress() {
             <div>
               <h3>
                 ${escapeHTML(
-                  student.name || "Student"
+                  student.name ||
+                  "Student"
                 )}
               </h3>
 
               <p>
                 ${escapeHTML(
-                  student.email || ""
+                  student.email ||
+                  ""
                 )}
               </p>
             </div>
@@ -2222,12 +2189,10 @@ function renderProgress() {
           </div>
 
           <div class="progress-bar">
-
             <div
               class="progress-fill"
               style="width:${progress.percentage}%"
             ></div>
-
           </div>
 
           <div class="progress-percent">
@@ -2236,24 +2201,16 @@ function renderProgress() {
 
         </div>
       `;
-
     }
   }
-
-
-  // ----------------------------------------------------------
-  // ALL STUDENTS
-  // ----------------------------------------------------------
 
   if (!container) return;
 
   if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
+    !["admin", "superadmin"]
+      .includes(state.profile?.role)
   ) {
-
     if (!state.selectedStudentId) {
-
       container.innerHTML =
         buildStudentOwnProgress();
     }
@@ -2261,91 +2218,95 @@ function renderProgress() {
     return;
   }
 
-
   if (!state.users.length) {
-
-    container.innerHTML = `
-      <div class="empty-state">
+    container.innerHTML =
+      `<div class="empty-state">
         <p>No students found.</p>
-      </div>
-    `;
+      </div>`;
 
     return;
   }
 
-
   container.innerHTML =
-    state.users.map(student => {
+    state.users
+      .map(student => {
 
-      const id =
-        student.uid ||
-        student.id;
+        const id =
+          student.uid ||
+          student.id;
 
-      const progress =
-        calculateStudentProgress(id);
+        const progress =
+          calculateStudentProgress(
+            id
+          );
 
-      return `
-        <div
-          class="student-progress-card"
-          data-progress-student="${escapeHTML(id)}"
-        >
+        return `
+          <div
+            class="student-progress-card"
+            data-progress-student="${escapeHTML(id)}"
+          >
 
-          <div class="progress-student-header">
+            <div class="progress-student-header">
 
-            <div class="user-avatar">
-              ${escapeHTML(
-                (student.name || "S")
-                  .charAt(0)
-                  .toUpperCase()
-              )}
+              <div class="user-avatar">
+                ${escapeHTML(
+                  (
+                    student.name ||
+                    "S"
+                  )
+                    .charAt(0)
+                    .toUpperCase()
+                )}
+              </div>
+
+              <div>
+                <h3>
+                  ${escapeHTML(
+                    student.name ||
+                    "Student"
+                  )}
+                </h3>
+
+                <p>
+                  ${escapeHTML(
+                    student.email ||
+                    ""
+                  )}
+                </p>
+              </div>
+
             </div>
 
-            <div>
-              <h3>
-                ${escapeHTML(
-                  student.name || "Student"
-                )}
-              </h3>
+            <div class="progress-info">
 
-              <p>
-                ${escapeHTML(
-                  student.email || ""
-                )}
-              </p>
+              <div class="progress-top">
+
+                <span>
+                  ${progress.completed}
+                  /
+                  ${progress.total}
+                  completed
+                </span>
+
+                <strong>
+                  ${progress.percentage}%
+                </strong>
+
+              </div>
+
+              <div class="progress-bar">
+                <div
+                  class="progress-fill"
+                  style="width:${progress.percentage}%"
+                ></div>
+              </div>
+
             </div>
 
           </div>
-
-          <div class="progress-info">
-
-            <div class="progress-top">
-              <span>
-                ${progress.completed}
-                /
-                ${progress.total}
-                completed
-              </span>
-
-              <strong>
-                ${progress.percentage}%
-              </strong>
-            </div>
-
-            <div class="progress-bar">
-
-              <div
-                class="progress-fill"
-                style="width:${progress.percentage}%"
-              ></div>
-
-            </div>
-
-          </div>
-
-        </div>
-      `;
-    }).join("");
-
+        `;
+      })
+      .join("");
 
   container
     .querySelectorAll(
@@ -2358,7 +2319,8 @@ function renderProgress() {
         () => {
 
           state.selectedStudentId =
-            card.dataset.progressStudent;
+            card.dataset
+              .progressStudent;
 
           renderProgress();
         }
@@ -2366,96 +2328,38 @@ function renderProgress() {
     });
 }
 
-
-function buildStudentOwnProgress() {
-
-  const progress =
-    calculateStudentProgress(
-      state.user.uid
-    );
-
-  return `
-    <div class="progress-detail-card">
-
-      <h3>My Progress</h3>
-
-      <div class="progress-stat-grid">
-
-        <div>
-          <strong>
-            ${progress.total}
-          </strong>
-          <span>Total</span>
-        </div>
-
-        <div>
-          <strong>
-            ${progress.completed}
-          </strong>
-          <span>Completed</span>
-        </div>
-
-        <div>
-          <strong>
-            ${progress.inProgress}
-          </strong>
-          <span>Active</span>
-        </div>
-
-        <div>
-          <strong>
-            ${progress.pending}
-          </strong>
-          <span>Pending</span>
-        </div>
-
-      </div>
-
-      <div class="progress-bar">
-
-        <div
-          class="progress-fill"
-          style="width:${progress.percentage}%"
-        ></div>
-
-      </div>
-
-      <div class="progress-percent">
-        ${progress.percentage}% completed
-      </div>
-
-    </div>
-  `;
-}
-
-
 // ============================================================
 // SUPER ADMIN MONITORING
 // ============================================================
 
 async function renderSuperAdminUsers() {
-
   if (
-    state.profile?.role !== "superadmin"
+    state.profile?.role !==
+    "superadmin"
   ) {
     return;
   }
 
   try {
-
     const snapshot =
       await getDocs(
         query(
           collection(db, "users"),
-          where("role", "==", "admin")
+          where(
+            "role",
+            "==",
+            "admin"
+          )
         )
       );
 
     const admins =
-      snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
+      snapshot.docs.map(
+        item => ({
+          id: item.id,
+          ...item.data()
+        })
+      );
 
     const container =
       $("superAdminUsers");
@@ -2463,75 +2367,79 @@ async function renderSuperAdminUsers() {
     if (!container) return;
 
     if (!admins.length) {
-
-      container.innerHTML = `
-        <div class="empty-state">
+      container.innerHTML =
+        `<div class="empty-state">
           <p>No administrators found.</p>
-        </div>
-      `;
+        </div>`;
 
       return;
     }
 
     container.innerHTML =
-      admins.map(admin => {
+      admins
+        .map(admin => {
 
-        const adminTasks =
-          state.tasks.filter(
-            task =>
-              task.assignedBy === admin.uid
-          );
+          const adminTasks =
+            state.tasks.filter(
+              task =>
+                task.assignedBy ===
+                admin.uid
+            );
 
-        const studentIds =
-          [
-            ...new Set(
-              adminTasks.map(
-                task =>
-                  task.assignedTo
+          const studentIds =
+            [
+              ...new Set(
+                adminTasks
+                  .map(
+                    task =>
+                      task.assignedTo
+                  )
+                  .filter(Boolean)
               )
-            )
-          ];
+            ];
 
-        return `
-          <div class="admin-monitor-card">
+          return `
+            <div class="admin-monitor-card">
 
-            <h3>
-              ${escapeHTML(
-                admin.name || "Admin"
-              )}
-            </h3>
+              <h3>
+                ${escapeHTML(
+                  admin.name ||
+                  "Admin"
+                )}
+              </h3>
 
-            <p>
-              ${escapeHTML(
-                admin.email || ""
-              )}
-            </p>
+              <p>
+                ${escapeHTML(
+                  admin.email ||
+                  ""
+                )}
+              </p>
 
-            <small>
-              Created:
-              ${escapeHTML(
-                formatDateTime(
-                  admin.createdAt
-                )
-              )}
-            </small>
+              <small>
+                Created:
+                ${escapeHTML(
+                  formatDateTime(
+                    admin.createdAt
+                  )
+                )}
+              </small>
 
-            <div>
-              Students:
-              ${studentIds.length}
+              <div>
+                Students:
+                ${studentIds.length}
+              </div>
+
+              <div>
+                Tasks:
+                ${adminTasks.length}
+              </div>
+
             </div>
-
-            <div>
-              Tasks:
-              ${adminTasks.length}
-            </div>
-
-          </div>
-        `;
-      }).join("");
+          `;
+        })
+        .join("");
 
   } catch (error) {
-
     console.error(
       "renderSuperAdminUsers:",
       error
@@ -2539,75 +2447,52 @@ async function renderSuperAdminUsers() {
   }
 }
 
-
 // ============================================================
 // START APPLICATION
 // ============================================================
 
 async function startApplication() {
-
   if (!state.user) return;
+
+  state.loading = true;
+
+  clearStartupError();
 
   try {
 
-    state.loading = true;
-
     await loadProfile();
-
-    updateUserUI();
-
-    // Hide auth screen
-
-    const authScreen =
-      $("authScreen");
-
-    const mainApp =
-      $("mainApp");
-
-    if (authScreen) {
-      authScreen.style.display =
-        "none";
-    }
-
-    if (mainApp) {
-      mainApp.style.display =
-        "";
-    }
-
-
-    // --------------------------------------------------------
-    // ROLE BASED NAVIGATION
-    // --------------------------------------------------------
 
     const role =
       state.profile?.role;
 
-    const usersNav =
-      $("usersNavItem");
+    if (!role) {
+      throw new Error(
+        "The user profile does not contain a role."
+      );
+    }
 
-    const progressNav =
-      $("progressNavItem");
+    if ($("authScreen")) {
+      $("authScreen").style.display =
+        "none";
+    }
 
-    if (usersNav) {
-      usersNav.style.display =
+    if ($("mainApp")) {
+      $("mainApp").style.display =
+        "";
+    }
+
+    if ($("usersNavItem")) {
+      $("usersNavItem").style.display =
         role === "admin" ||
         role === "superadmin"
           ? ""
           : "none";
     }
 
-    if (progressNav) {
-      progressNav.style.display =
-        role === "admin" ||
-        role === "superadmin"
-          ? ""
-          : "";
+    if ($("progressNavItem")) {
+      $("progressNavItem").style.display =
+        "";
     }
-
-
-    // --------------------------------------------------------
-    // LOAD DATA
-    // --------------------------------------------------------
 
     await loadUsers();
 
@@ -2619,224 +2504,87 @@ async function startApplication() {
 
   } catch (error) {
 
-    console.error(
-      "startApplication:",
-      error
-    );
-
-    showToast(
-      firebaseError(error),
-      "error"
+    showStartupError(
+      error,
+      "Starting Task Manager"
     );
 
   } finally {
 
     state.loading = false;
+
   }
 }
 
-
-// ============================================================
-// AUTH SCREEN
-// ============================================================
-
 function showLoggedOutScreen() {
 
-  const authScreen =
-    $("authScreen");
-
-  const mainApp =
-    $("mainApp");
-
-  if (authScreen) {
-    authScreen.style.display =
+  if ($("authScreen")) {
+    $("authScreen").style.display =
       "";
   }
 
-  if (mainApp) {
-    mainApp.style.display =
+  if ($("mainApp")) {
+    $("mainApp").style.display =
       "none";
   }
+
+  clearStartupError();
 
   showLoginPanel();
 }
 
-
 // ============================================================
-// MODALS
+// EVENTS
 // ============================================================
 
-function setupModals() {
-
-  const addUserBtn =
-    $("addUserBtn");
-
-  if (addUserBtn) {
-
-    addUserBtn.addEventListener(
-      "click",
-      () => {
-
-        if (
-          state.profile?.role !== "admin" &&
-          state.profile?.role !== "superadmin"
-        ) {
-          showToast(
-            "You do not have permission.",
-            "error"
-          );
-
-          return;
-        }
-
-        openModal("userModal");
-      }
-    );
-  }
-
-
-  const addTaskBtn =
-    $("addTaskBtn");
-
-  if (addTaskBtn) {
-
-    addTaskBtn.addEventListener(
-      "click",
-      () => {
-
-        if (
-          state.profile?.role !== "admin" &&
-          state.profile?.role !== "superadmin"
-        ) {
-          showToast(
-            "You do not have permission.",
-            "error"
-          );
-
-          return;
-        }
-
-        populateTaskUsers();
-
-        openModal("taskModal");
-      }
-    );
-  }
-
-
-  // Close buttons
+function setupNavigation() {
 
   document
     .querySelectorAll(
-      "[data-close-modal], .modal-close, .close-modal"
+      "[data-page]"
     )
-    .forEach(button => {
+    .forEach(item => {
 
-      button.addEventListener(
+      item.addEventListener(
         "click",
         () => {
 
-          const modal =
-            button.closest(".modal");
-
-          if (modal) {
-            modal.classList.remove("show");
-            modal.style.display = "";
-          }
-        }
-      );
-    });
-
-
-  // Click outside modal
-
-  document
-    .querySelectorAll(".modal")
-    .forEach(modal => {
-
-      modal.addEventListener(
-        "click",
-        event => {
-
-          if (
-            event.target === modal
-          ) {
-            modal.classList.remove(
-              "show"
+          if (item.dataset.page) {
+            showPage(
+              item.dataset.page
             );
-
-            modal.style.display =
-              "";
           }
+
         }
       );
     });
-}
 
-
-// ============================================================
-// SEARCH / FILTER
-// ============================================================
-
-function setupTaskFilters() {
-
-  const search =
-    $("taskSearch");
-
-  if (search) {
-
-    search.addEventListener(
-      "input",
-      () => {
-        renderTasks();
-      }
+  $("usersNavItem")
+    ?.addEventListener(
+      "click",
+      () => showPage("users")
     );
-  }
 
-  const filter =
-    $("taskStatusFilter");
-
-  if (filter) {
-
-    filter.addEventListener(
-      "change",
-      () => {
-        renderTasks();
-      }
+  $("progressNavItem")
+    ?.addEventListener(
+      "click",
+      () => showPage("progress")
     );
-  }
 }
-
-
-// ============================================================
-// AUTH UI EVENTS
-// ============================================================
 
 function setupAuthEvents() {
 
-  const loginForm =
-    $("loginForm");
-
-  if (loginForm) {
-    loginForm.addEventListener(
+  $("loginForm")
+    ?.addEventListener(
       "submit",
       loginUser
     );
-  }
 
-
-  const registerForm =
-    $("registerForm");
-
-  if (registerForm) {
-    registerForm.addEventListener(
+  $("registerForm")
+    ?.addEventListener(
       "submit",
       registerAdmin
     );
-  }
-
-
-  // Common buttons for switching auth panels
 
   document
     .querySelectorAll(
@@ -2855,7 +2603,6 @@ function setupAuthEvents() {
       );
     });
 
-
   document
     .querySelectorAll(
       "[data-show-login], #showLogin"
@@ -2872,9 +2619,6 @@ function setupAuthEvents() {
         }
       );
     });
-
-
-  // Logout buttons
 
   document
     .querySelectorAll(
@@ -2894,73 +2638,170 @@ function setupAuthEvents() {
     });
 }
 
-
-// ============================================================
-// FORMS
-// ============================================================
-
 function setupForms() {
 
-  const userForm =
-    $("userForm");
-
-  if (userForm) {
-    userForm.addEventListener(
+  $("userForm")
+    ?.addEventListener(
       "submit",
       createUser
     );
-  }
 
-
-  const taskForm =
-    $("taskForm");
-
-  if (taskForm) {
-    taskForm.addEventListener(
+  $("taskForm")
+    ?.addEventListener(
       "submit",
       createTask
     );
-  }
 }
 
+function setupModals() {
 
-// ============================================================
-// SIDEBAR MENU
-// ============================================================
+  $("addUserBtn")
+    ?.addEventListener(
+      "click",
+      () => {
+
+        if (
+          !["admin", "superadmin"]
+            .includes(
+              state.profile?.role
+            )
+        ) {
+          showToast(
+            "You do not have permission.",
+            "error"
+          );
+
+          return;
+        }
+
+        openModal("userModal");
+      }
+    );
+
+  $("addTaskBtn")
+    ?.addEventListener(
+      "click",
+      () => {
+
+        if (
+          !["admin", "superadmin"]
+            .includes(
+              state.profile?.role
+            )
+        ) {
+          showToast(
+            "You do not have permission.",
+            "error"
+          );
+
+          return;
+        }
+
+        populateTaskUsers();
+
+        openModal("taskModal");
+      }
+    );
+
+  document
+    .querySelectorAll(
+      "[data-close-modal], .modal-close, .close-modal"
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          const modal =
+            button.closest(
+              ".modal"
+            );
+
+          if (modal) {
+            modal.classList.remove(
+              "show"
+            );
+
+            modal.style.display =
+              "";
+          }
+
+        }
+      );
+    });
+
+  document
+    .querySelectorAll(
+      ".modal"
+    )
+    .forEach(modal => {
+
+      modal.addEventListener(
+        "click",
+        event => {
+
+          if (
+            event.target ===
+            modal
+          ) {
+
+            modal.classList.remove(
+              "show"
+            );
+
+            modal.style.display =
+              "";
+          }
+
+        }
+      );
+    });
+}
+
+function setupTaskFilters() {
+
+  $("taskSearch")
+    ?.addEventListener(
+      "input",
+      renderTasks
+    );
+
+  $("taskStatusFilter")
+    ?.addEventListener(
+      "change",
+      renderTasks
+    );
+}
 
 function setupSidebar() {
 
-  const menuButtons =
-    document.querySelectorAll(
+  document
+    .querySelectorAll(
       ".menu-toggle, #menuToggle, #hamburgerBtn"
-    );
+    )
+    .forEach(button => {
 
-  menuButtons.forEach(button => {
+      button.addEventListener(
+        "click",
+        event => {
 
-    button.addEventListener(
-      "click",
-      event => {
+          event.stopPropagation();
 
-        event.stopPropagation();
-
-        document.body.classList.toggle(
-          "sidebar-open"
-        );
-
-        const sidebar =
-          document.querySelector(
-            ".sidebar"
+          document.body.classList.toggle(
+            "sidebar-open"
           );
 
-        if (sidebar) {
-          sidebar.classList.toggle(
-            "open"
-          );
+          document
+            .querySelector(
+              ".sidebar"
+            )
+            ?.classList.toggle(
+              "open"
+            );
         }
-      }
-    );
-  });
-
+      );
+    });
 
   document.addEventListener(
     "click",
@@ -2973,79 +2814,81 @@ function setupSidebar() {
 
       if (!sidebar) return;
 
-      const clickedInside =
-        sidebar.contains(event.target);
+      const inside =
+        sidebar.contains(
+          event.target
+        );
 
-      const clickedMenu =
+      const menu =
         event.target.closest(
           ".menu-toggle, #menuToggle, #hamburgerBtn"
         );
 
-      if (
-        !clickedInside &&
-        !clickedMenu
-      ) {
+      if (!inside && !menu) {
         closeSidebarMobile();
       }
     }
   );
 }
 
-
-// ============================================================
-// PROFILE / AVATAR
-// ============================================================
-
-function updateAvatar() {
-
-  const name =
-    state.profile?.name ||
-    state.user?.displayName ||
-    state.user?.email ||
-    "U";
-
-  const letter =
-    name.charAt(0).toUpperCase();
-
-  [
-    "sidebarAvatar",
-    "profileAvatar"
-  ].forEach(id => {
-
-    const el = $(id);
-
-    if (el) {
-      el.textContent =
-        letter;
-    }
-  });
-}
-
-
-// ============================================================
-// GLOBAL EVENT SETUP
-// ============================================================
-
 function setupEvents() {
 
   setupNavigation();
-
   setupAuthEvents();
-
   setupForms();
-
   setupModals();
-
   setupTaskFilters();
-
   setupSidebar();
-
-  updateAvatar();
 }
 
+function setVersion() {
+
+  document
+    .querySelectorAll(
+      "#appVersion, [data-app-version]"
+    )
+    .forEach(element => {
+
+      element.textContent =
+        `Task Manager ${VERSION}`;
+    });
+}
 
 // ============================================================
-// AUTH STATE LISTENER
+// GLOBAL ERROR HANDLING
+// ============================================================
+
+window.addEventListener(
+  "error",
+  event => {
+
+    showStartupError(
+      event.error ||
+        new Error(
+          event.message ||
+          "Unknown JavaScript error"
+        ),
+      "JavaScript error"
+    );
+  }
+);
+
+window.addEventListener(
+  "unhandledrejection",
+  event => {
+
+    showStartupError(
+      event.reason ||
+        new Error(
+          "Unhandled promise error"
+        ),
+      "Firebase/application error"
+    );
+  }
+);
+
+// ============================================================
+// FIREBASE AUTH LISTENER
 // ============================================================
 
 onAuthStateChanged(
@@ -3071,7 +2914,6 @@ onAuthStateChanged(
   }
 );
 
-
 // ============================================================
 // INITIALIZE
 // ============================================================
@@ -3082,27 +2924,18 @@ document.addEventListener(
 
     setupEvents();
 
-    // Set version anywhere it exists
-
-    document
-      .querySelectorAll(
-        "#appVersion, [data-app-version]"
-      )
-      .forEach(el => {
-
-        el.textContent =
-          `Task Manager ${VERSION}`;
-      });
+    setVersion();
   }
 );
 
-
 // ============================================================
-// GLOBAL DEBUG ACCESS
+// DEBUG ACCESS
 // ============================================================
 
 window.TaskManager = {
+
   state,
+
   version: VERSION,
 
   reload: async () => {
@@ -3112,4 +2945,5 @@ window.TaskManager = {
   },
 
   logout: logoutUser
+
 };
