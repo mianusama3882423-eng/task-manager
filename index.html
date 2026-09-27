@@ -1,1 +1,1377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
 
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="description"
+    content="Task Manager - Task Assignment and Progress Tracking System"
+  >
+
+  <meta
+    name="theme-color"
+    content="#4f46e5"
+  >
+
+  <title>Task Manager</title>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- ========================================================
+       APP LOADING
+  ========================================================= -->
+
+  <div id="appLoader" class="app-loader">
+    <div class="loader-box">
+      <div class="loader-spinner"></div>
+      <div class="loader-text">Loading Task Manager...</div>
+    </div>
+  </div>
+
+
+  <!-- ========================================================
+       AUTH SCREEN
+  ========================================================= -->
+
+  <section id="authScreen" class="screen auth-screen hidden">
+
+    <div class="auth-container">
+
+      <div class="brand-area">
+        <div class="brand-icon">✓</div>
+
+        <h1>Task Manager</h1>
+
+        <p>
+          Task Assignment &amp; Progress Tracking System
+        </p>
+      </div>
+
+
+      <!-- LOGIN -->
+
+      <div id="loginPanel" class="auth-card">
+
+        <div class="auth-card-header">
+          <h2>Welcome Back</h2>
+
+          <p>
+            Sign in to continue to your account
+          </p>
+        </div>
+
+
+        <form id="loginForm">
+
+          <div class="form-group">
+            <label for="loginEmail">
+              Email Address
+            </label>
+
+            <input
+              id="loginEmail"
+              type="email"
+              placeholder="Enter your email"
+              autocomplete="email"
+              required
+            >
+          </div>
+
+
+          <div class="form-group">
+
+            <label for="loginPassword">
+              Password
+            </label>
+
+            <div class="password-wrapper">
+
+              <input
+                id="loginPassword"
+                type="password"
+                placeholder="Enter your password"
+                autocomplete="current-password"
+                required
+              >
+
+              <button
+                type="button"
+                class="password-toggle"
+                data-target="loginPassword"
+                aria-label="Show password"
+              >
+                👁
+              </button>
+
+            </div>
+
+          </div>
+
+
+          <div
+            id="loginMessage"
+            class="form-message"
+          ></div>
+
+
+          <button
+            type="submit"
+            class="primary-btn full-btn"
+          >
+            Sign In
+          </button>
+
+        </form>
+
+
+        <div class="auth-switch">
+
+          <span>Don't have an admin account?</span>
+
+          <button
+            type="button"
+            id="showRegisterBtn"
+            class="link-btn"
+          >
+            Register
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- REGISTER -->
+
+      <div
+        id="registerPanel"
+        class="auth-card hidden"
+      >
+
+        <div class="auth-card-header">
+
+          <h2>Create Admin Account</h2>
+
+          <p>
+            Register with your real email address
+          </p>
+
+        </div>
+
+
+        <form id="registerForm">
+
+          <div class="form-group">
+
+            <label for="registerName">
+              Full Name
+            </label>
+
+            <input
+              id="registerName"
+              type="text"
+              placeholder="Enter your full name"
+              autocomplete="name"
+              required
+            >
+
+          </div>
+
+
+          <div class="form-group">
+
+            <label for="registerEmail">
+              Email Address
+            </label>
+
+            <input
+              id="registerEmail"
+              type="email"
+              placeholder="Enter your email"
+              autocomplete="email"
+              required
+            >
+
+          </div>
+
+
+          <div class="form-group">
+
+            <label for="registerPassword">
+              Password
+            </label>
+
+            <div class="password-wrapper">
+
+              <input
+                id="registerPassword"
+                type="password"
+                placeholder="Create a password"
+                autocomplete="new-password"
+                minlength="6"
+                required
+              >
+
+              <button
+                type="button"
+                class="password-toggle"
+                data-target="registerPassword"
+                aria-label="Show password"
+              >
+                👁
+              </button>
+
+            </div>
+
+          </div>
+
+
+          <div class="form-group">
+
+            <label for="registerConfirmPassword">
+              Confirm Password
+            </label>
+
+            <div class="password-wrapper">
+
+              <input
+                id="registerConfirmPassword"
+                type="password"
+                placeholder="Confirm your password"
+                autocomplete="new-password"
+                minlength="6"
+                required
+              >
+
+              <button
+                type="button"
+                class="password-toggle"
+                data-target="registerConfirmPassword"
+                aria-label="Show password"
+              >
+                👁
+              </button>
+
+            </div>
+
+          </div>
+
+
+          <div
+            id="registerMessage"
+            class="form-message"
+          ></div>
+
+
+          <button
+            type="submit"
+            class="primary-btn full-btn"
+          >
+            Create Account
+          </button>
+
+        </form>
+
+
+        <div class="auth-switch">
+
+          <span>Already have an account?</span>
+
+          <button
+            type="button"
+            id="showLoginBtn"
+            class="link-btn"
+          >
+            Sign In
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- ========================================================
+       MAIN APPLICATION
+  ========================================================= -->
+
+  <section
+    id="mainApp"
+    class="main-app hidden"
+  >
+
+    <!-- HEADER -->
+
+    <header class="top-header">
+
+      <div class="header-left">
+
+        <button
+          id="mobileMenuBtn"
+          class="icon-btn mobile-only"
+          type="button"
+          aria-label="Open menu"
+        >
+          ☰
+        </button>
+
+        <div class="header-brand">
+
+          <div class="header-brand-icon">
+            ✓
+          </div>
+
+          <div>
+            <h1>Task Manager</h1>
+
+            <span>
+              Task Assignment &amp; Progress Tracking
+            </span>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="header-right">
+
+        <div
+          id="headerUserInfo"
+          class="header-user-info"
+        >
+          <strong id="headerUserName">
+            User
+          </strong>
+
+          <span id="headerUserRole">
+            Account
+          </span>
+        </div>
+
+
+        <button
+          id="logoutBtn"
+          class="logout-btn"
+          type="button"
+        >
+          Logout
+        </button>
+
+      </div>
+
+    </header>
+
+
+
+    <!-- MOBILE OVERLAY -->
+
+    <div
+      id="sidebarOverlay"
+      class="sidebar-overlay hidden"
+    ></div>
+
+
+
+    <!-- APPLICATION BODY -->
+
+    <div class="app-layout">
+
+
+      <!-- SIDEBAR -->
+
+      <aside
+        id="sidebar"
+        class="sidebar"
+      >
+
+        <div class="sidebar-top">
+
+          <div class="sidebar-profile">
+
+            <div
+              id="sidebarAvatar"
+              class="avatar"
+            >
+              U
+            </div>
+
+            <div class="sidebar-profile-text">
+
+              <strong id="sidebarName">
+                User
+              </strong>
+
+              <span id="sidebarRole">
+                Account
+              </span>
+
+            </div>
+
+          </div>
+
+
+          <nav class="sidebar-nav">
+
+            <button
+              type="button"
+              class="nav-item active"
+              data-page="dashboard"
+            >
+              <span class="nav-icon">▦</span>
+              <span>Dashboard</span>
+            </button>
+
+
+            <button
+              type="button"
+              class="nav-item"
+              data-page="users"
+              id="usersNavItem"
+            >
+              <span class="nav-icon">👥</span>
+              <span>Users</span>
+            </button>
+
+
+            <button
+              type="button"
+              class="nav-item"
+              data-page="tasks"
+            >
+              <span class="nav-icon">✓</span>
+              <span>Tasks</span>
+            </button>
+
+
+            <button
+              type="button"
+              class="nav-item"
+              data-page="progress"
+              id="progressNavItem"
+            >
+              <span class="nav-icon">▥</span>
+              <span>Progress Reports</span>
+            </button>
+
+
+            <button
+              type="button"
+              class="nav-item"
+              data-page="profile"
+            >
+              <span class="nav-icon">◉</span>
+              <span>My Profile</span>
+            </button>
+
+          </nav>
+
+        </div>
+
+
+        <div class="sidebar-bottom">
+
+          <div class="sidebar-version">
+            Task Manager v1.0.0
+          </div>
+
+        </div>
+
+      </aside>
+
+
+
+      <!-- CONTENT -->
+
+      <main class="main-content">
+
+
+        <!-- ==================================================
+             DASHBOARD PAGE
+        =================================================== -->
+
+        <section
+          id="dashboardPage"
+          class="page active-page"
+        >
+
+          <div class="page-header">
+
+            <div>
+
+              <h2 id="dashboardGreeting">
+                Dashboard
+              </h2>
+
+              <p>
+                Manage tasks and track progress.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <!-- STATISTICS -->
+
+          <div class="stats-grid">
+
+
+            <div class="stat-card">
+
+              <div class="stat-icon blue">
+                ✓
+              </div>
+
+              <div class="stat-content">
+
+                <span>Total Tasks</span>
+
+                <strong id="statTotalTasks">
+                  0
+                </strong>
+
+              </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+              <div class="stat-icon orange">
+                ◷
+              </div>
+
+              <div class="stat-content">
+
+                <span>Pending</span>
+
+                <strong id="statPending">
+                  0
+                </strong>
+
+              </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+              <div class="stat-icon purple">
+                ▶
+              </div>
+
+              <div class="stat-content">
+
+                <span>In Progress</span>
+
+                <strong id="statInProgress">
+                  0
+                </strong>
+
+              </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+              <div class="stat-icon green">
+                ✓
+              </div>
+
+              <div class="stat-content">
+
+                <span>Completed</span>
+
+                <strong id="statCompleted">
+                  0
+                </strong>
+
+              </div>
+
+            </div>
+
+
+          </div>
+
+
+
+          <!-- DASHBOARD CONTENT -->
+
+          <div class="dashboard-grid">
+
+
+            <div class="content-card">
+
+              <div class="card-header">
+
+                <div>
+
+                  <h3>Recent Tasks</h3>
+
+                  <p>
+                    Latest task activity
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  class="small-btn"
+                  data-page-target="tasks"
+                >
+                  View All
+                </button>
+
+              </div>
+
+
+              <div
+                id="recentTasksContainer"
+                class="task-list"
+              >
+
+                <div class="empty-state">
+                  <div class="empty-icon">✓</div>
+
+                  <h4>No tasks yet</h4>
+
+                  <p>
+                    Tasks will appear here.
+                  </p>
+                </div>
+
+              </div>
+
+            </div>
+
+
+
+            <div class="content-card">
+
+              <div class="card-header">
+
+                <div>
+
+                  <h3>Task Overview</h3>
+
+                  <p>
+                    Current task status
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <div class="overview-chart">
+
+                <div
+                  id="overviewProgress"
+                  class="circular-progress"
+                >
+
+                  <div class="circular-progress-inner">
+
+                    <strong id="overviewPercentage">
+                      0%
+                    </strong>
+
+                    <span>
+                      Completed
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+                <div class="chart-legend">
+
+                  <div>
+                    <span class="legend-dot pending"></span>
+                    Pending
+                  </div>
+
+                  <div>
+                    <span class="legend-dot progress"></span>
+                    In Progress
+                  </div>
+
+                  <div>
+                    <span class="legend-dot completed"></span>
+                    Completed
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+
+        <!-- ==================================================
+             USERS PAGE
+        =================================================== -->
+
+        <section
+          id="usersPage"
+          class="page hidden"
+        >
+
+          <div class="page-header">
+
+            <div>
+
+              <h2>Users</h2>
+
+              <p>
+                Manage the users assigned to you.
+              </p>
+
+            </div>
+
+
+            <button
+              id="addUserBtn"
+              type="button"
+              class="primary-btn"
+            >
+              + Add User
+            </button>
+
+          </div>
+
+
+          <div
+            id="usersContainer"
+            class="users-grid"
+          >
+
+            <div class="empty-state full-width">
+              <div class="empty-icon">👥</div>
+
+              <h4>No users found</h4>
+
+              <p>
+                Create your first user to assign tasks.
+              </p>
+            </div>
+
+          </div>
+
+        </section>
+
+
+
+        <!-- ==================================================
+             TASKS PAGE
+        =================================================== -->
+
+        <section
+          id="tasksPage"
+          class="page hidden"
+        >
+
+          <div class="page-header">
+
+            <div>
+
+              <h2>Tasks</h2>
+
+              <p>
+                View and manage assigned tasks.
+              </p>
+
+            </div>
+
+
+            <button
+              id="addTaskBtn"
+              type="button"
+              class="primary-btn admin-only"
+            >
+              + Assign Task
+            </button>
+
+          </div>
+
+
+          <div class="filter-bar">
+
+            <div class="search-box">
+
+              <span>⌕</span>
+
+              <input
+                id="taskSearch"
+                type="search"
+                placeholder="Search tasks..."
+              >
+
+            </div>
+
+
+            <select id="taskStatusFilter">
+
+              <option value="all">
+                All Status
+              </option>
+
+              <option value="pending">
+                Pending
+              </option>
+
+              <option value="accepted">
+                Accepted
+              </option>
+
+              <option value="in_progress">
+                In Progress
+              </option>
+
+              <option value="completed">
+                Completed
+              </option>
+
+            </select>
+
+          </div>
+
+
+          <div class="content-card">
+
+            <div
+              id="allTasksContainer"
+              class="task-list"
+            >
+
+              <div class="empty-state">
+                <div class="empty-icon">✓</div>
+
+                <h4>No tasks found</h4>
+
+                <p>
+                  Tasks will appear here.
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+
+        <!-- ==================================================
+             PROGRESS PAGE
+        =================================================== -->
+
+        <section
+          id="progressPage"
+          class="page hidden"
+        >
+
+          <div class="page-header">
+
+            <div>
+
+              <h2>Progress Reports</h2>
+
+              <p>
+                Track user performance and task completion.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div
+            id="progressContainer"
+            class="progress-container"
+          >
+
+            <div class="content-card">
+
+              <div class="card-header">
+
+                <div>
+
+                  <h3>Overall Performance</h3>
+
+                  <p>
+                    Task completion overview
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <div
+                id="progressSummary"
+                class="progress-summary"
+              >
+
+                <div class="empty-state">
+                  <div class="empty-icon">▥</div>
+
+                  <h4>No progress data</h4>
+
+                  <p>
+                    Progress information will appear
+                    when tasks are completed.
+                  </p>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+
+        <!-- ==================================================
+             PROFILE PAGE
+        =================================================== -->
+
+        <section
+          id="profilePage"
+          class="page hidden"
+        >
+
+          <div class="page-header">
+
+            <div>
+
+              <h2>My Profile</h2>
+
+              <p>
+                View your account information.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div class="profile-card">
+
+            <div class="profile-card-top">
+
+              <div
+                id="profileAvatar"
+                class="large-avatar"
+              >
+                U
+              </div>
+
+              <div>
+
+                <h3 id="profileName">
+                  User
+                </h3>
+
+                <span
+                  id="profileRole"
+                  class="role-badge"
+                >
+                  User
+                </span>
+
+              </div>
+
+            </div>
+
+
+            <div class="profile-details">
+
+              <div class="profile-detail">
+
+                <span>
+                  Full Name
+                </span>
+
+                <strong id="profileNameDetail">
+                  —
+                </strong>
+
+              </div>
+
+
+              <div class="profile-detail">
+
+                <span>
+                  Email
+                </span>
+
+                <strong id="profileEmail">
+                  —
+                </strong>
+
+              </div>
+
+
+              <div class="profile-detail">
+
+                <span>
+                  Account Role
+                </span>
+
+                <strong id="profileRoleDetail">
+                  —
+                </strong>
+
+              </div>
+
+
+              <div class="profile-detail">
+
+                <span>
+                  Account Status
+                </span>
+
+                <strong id="profileStatus">
+                  Active
+                </strong>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+      </main>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- ========================================================
+       ADD USER MODAL
+  ========================================================= -->
+
+  <div
+    id="userModal"
+    class="modal hidden"
+  >
+
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-card">
+
+      <div class="modal-header">
+
+        <div>
+
+          <h3>Create New User</h3>
+
+          <p>
+            Create a login account for a user.
+          </p>
+
+        </div>
+
+        <button
+          type="button"
+          class="modal-close"
+          data-close-modal="userModal"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <form id="userForm">
+
+        <div class="form-group">
+
+          <label for="userName">
+            Full Name
+          </label>
+
+          <input
+            id="userName"
+            type="text"
+            placeholder="Enter user's name"
+            required
+          >
+
+        </div>
+
+
+        <div class="form-group">
+
+          <label for="userEmail">
+            Email Address
+          </label>
+
+          <input
+            id="userEmail"
+            type="email"
+            placeholder="Enter user's email"
+            required
+          >
+
+        </div>
+
+
+        <div class="form-group">
+
+          <label for="userPassword">
+            Temporary Password
+          </label>
+
+          <div class="password-wrapper">
+
+            <input
+              id="userPassword"
+              type="password"
+              placeholder="Minimum 6 characters"
+              minlength="6"
+              required
+            >
+
+            <button
+              type="button"
+              class="password-toggle"
+              data-target="userPassword"
+              aria-label="Show password"
+            >
+              👁
+            </button>
+
+          </div>
+
+        </div>
+
+
+        <div
+          id="userMessage"
+          class="form-message"
+        ></div>
+
+
+        <div class="modal-actions">
+
+          <button
+            type="button"
+            class="secondary-btn"
+            data-close-modal="userModal"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            class="primary-btn"
+          >
+            Create User
+          </button>
+
+        </div>
+
+      </form>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- ========================================================
+       ADD TASK MODAL
+  ========================================================= -->
+
+  <div
+    id="taskModal"
+    class="modal hidden"
+  >
+
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-card">
+
+      <div class="modal-header">
+
+        <div>
+
+          <h3>Assign New Task</h3>
+
+          <p>
+            Create and assign a task to a user.
+          </p>
+
+        </div>
+
+        <button
+          type="button"
+          class="modal-close"
+          data-close-modal="taskModal"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <form id="taskForm">
+
+        <div class="form-group">
+
+          <label for="taskTitle">
+            Task Title
+          </label>
+
+          <input
+            id="taskTitle"
+            type="text"
+            placeholder="Enter task title"
+            required
+          >
+
+        </div>
+
+
+        <div class="form-group">
+
+          <label for="taskDescription">
+            Description
+          </label>
+
+          <textarea
+            id="taskDescription"
+            rows="4"
+            placeholder="Describe the task..."
+            required
+          ></textarea>
+
+        </div>
+
+
+        <div class="form-group">
+
+          <label for="taskUser">
+            Assign To
+          </label>
+
+          <select
+            id="taskUser"
+            required
+          >
+
+            <option value="">
+              Select a user
+            </option>
+
+          </select>
+
+        </div>
+
+
+        <div class="form-group">
+
+          <label for="taskDueDate">
+            Due Date
+          </label>
+
+          <input
+            id="taskDueDate"
+            type="date"
+          >
+
+        </div>
+
+
+        <div
+          id="taskMessage"
+          class="form-message"
+        ></div>
+
+
+        <div class="modal-actions">
+
+          <button
+            type="button"
+            class="secondary-btn"
+            data-close-modal="taskModal"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            class="primary-btn"
+          >
+            Assign Task
+          </button>
+
+        </div>
+
+      </form>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- ========================================================
+       TOAST NOTIFICATION
+  ========================================================= -->
+
+  <div
+    id="toast"
+    class="toast hidden"
+  >
+
+    <span id="toastIcon">✓</span>
+
+    <span id="toastMessage">
+      Done
+    </span>
+
+  </div>
+
+
+
+  <!-- ========================================================
+       JAVASCRIPT
+  ========================================================= -->
+
+  <script
+    type="module"
+    src="app.js"
+  ></script>
+
+</body>
+            </html>
