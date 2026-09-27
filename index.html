@@ -46,6 +46,7 @@
     <div class="auth-container">
 
       <div class="brand-area">
+
         <div class="brand-icon">✓</div>
 
         <h1>Task Manager</h1>
@@ -53,25 +54,31 @@
         <p>
           Task Assignment &amp; Progress Tracking System
         </p>
+
       </div>
 
 
-      <!-- LOGIN -->
+      <!-- ====================================================
+           LOGIN
+      ===================================================== -->
 
       <div id="loginPanel" class="auth-card">
 
         <div class="auth-card-header">
+
           <h2>Welcome Back</h2>
 
           <p>
             Sign in to continue to your account
           </p>
+
         </div>
 
 
         <form id="loginForm">
 
           <div class="form-group">
+
             <label for="loginEmail">
               Email Address
             </label>
@@ -83,6 +90,7 @@
               autocomplete="email"
               required
             >
+
           </div>
 
 
@@ -149,7 +157,9 @@
       </div>
 
 
-      <!-- REGISTER -->
+      <!-- ====================================================
+           ADMIN REGISTER
+      ===================================================== -->
 
       <div
         id="registerPanel"
@@ -312,7 +322,9 @@
     class="main-app hidden"
   >
 
-    <!-- HEADER -->
+    <!-- ====================================================
+         HEADER
+    ===================================================== -->
 
     <header class="top-header">
 
@@ -327,6 +339,7 @@
           ☰
         </button>
 
+
         <div class="header-brand">
 
           <div class="header-brand-icon">
@@ -334,11 +347,13 @@
           </div>
 
           <div>
+
             <h1>Task Manager</h1>
 
             <span>
               Task Assignment &amp; Progress Tracking
             </span>
+
           </div>
 
         </div>
@@ -352,6 +367,7 @@
           id="headerUserInfo"
           class="header-user-info"
         >
+
           <strong id="headerUserName">
             User
           </strong>
@@ -359,6 +375,7 @@
           <span id="headerUserRole">
             Account
           </span>
+
         </div>
 
 
@@ -376,7 +393,9 @@
 
 
 
-    <!-- MOBILE OVERLAY -->
+    <!-- ====================================================
+         MOBILE OVERLAY
+    ===================================================== -->
 
     <div
       id="sidebarOverlay"
@@ -385,12 +404,16 @@
 
 
 
-    <!-- APPLICATION BODY -->
+    <!-- ====================================================
+         APPLICATION BODY
+    ===================================================== -->
 
     <div class="app-layout">
 
 
-      <!-- SIDEBAR -->
+      <!-- ==================================================
+           SIDEBAR
+      =================================================== -->
 
       <aside
         id="sidebar"
@@ -430,8 +453,13 @@
               class="nav-item active"
               data-page="dashboard"
             >
+
               <span class="nav-icon">▦</span>
-              <span>Dashboard</span>
+
+              <span>
+                Dashboard
+              </span>
+
             </button>
 
 
@@ -441,8 +469,13 @@
               data-page="users"
               id="usersNavItem"
             >
+
               <span class="nav-icon">👥</span>
-              <span>Users</span>
+
+              <span>
+                Users
+              </span>
+
             </button>
 
 
@@ -451,8 +484,13 @@
               class="nav-item"
               data-page="tasks"
             >
+
               <span class="nav-icon">✓</span>
-              <span>Tasks</span>
+
+              <span>
+                Tasks
+              </span>
+
             </button>
 
 
@@ -462,8 +500,13 @@
               data-page="progress"
               id="progressNavItem"
             >
+
               <span class="nav-icon">▥</span>
-              <span>Progress Reports</span>
+
+              <span>
+                Progress Reports
+              </span>
+
             </button>
 
 
@@ -472,8 +515,13 @@
               class="nav-item"
               data-page="profile"
             >
+
               <span class="nav-icon">◉</span>
-              <span>My Profile</span>
+
+              <span>
+                My Profile
+              </span>
+
             </button>
 
           </nav>
@@ -484,7 +532,7 @@
         <div class="sidebar-bottom">
 
           <div class="sidebar-version">
-            Task Manager v1.0.0
+            Task Manager v1.0.4
           </div>
 
         </div>
@@ -493,7 +541,9 @@
 
 
 
-      <!-- CONTENT -->
+      <!-- ==================================================
+           MAIN CONTENT
+      =================================================== -->
 
       <main class="main-content">
 
@@ -537,7 +587,9 @@
 
               <div class="stat-content">
 
-                <span>Total Tasks</span>
+                <span>
+                  Total Tasks
+                </span>
 
                 <strong id="statTotalTasks">
                   0
@@ -556,7 +608,9 @@
 
               <div class="stat-content">
 
-                <span>Pending</span>
+                <span>
+                  Pending
+                </span>
 
                 <strong id="statPending">
                   0
@@ -575,7 +629,9 @@
 
               <div class="stat-content">
 
-                <span>In Progress</span>
+                <span>
+                  In Progress
+                </span>
 
                 <strong id="statInProgress">
                   0
@@ -594,7 +650,9 @@
 
               <div class="stat-content">
 
-                <span>Completed</span>
+                <span>
+                  Completed
+                </span>
 
                 <strong id="statCompleted">
                   0
@@ -603,7 +661,6 @@
               </div>
 
             </div>
-
 
           </div>
 
@@ -620,7 +677,9 @@
 
                 <div>
 
-                  <h3>Recent Tasks</h3>
+                  <h3>
+                    Recent Tasks
+                  </h3>
 
                   <p>
                     Latest task activity
@@ -645,13 +704,19 @@
               >
 
                 <div class="empty-state">
-                  <div class="empty-icon">✓</div>
 
-                  <h4>No tasks yet</h4>
+                  <div class="empty-icon">
+                    ✓
+                  </div>
+
+                  <h4>
+                    No tasks yet
+                  </h4>
 
                   <p>
                     Tasks will appear here.
                   </p>
+
                 </div>
 
               </div>
@@ -666,7 +731,9 @@
 
                 <div>
 
-                  <h3>Task Overview</h3>
+                  <h3>
+                    Task Overview
+                  </h3>
 
                   <p>
                     Current task status
@@ -741,10 +808,12 @@
 
             <div>
 
-              <h2>Users</h2>
+              <h2>
+                Users
+              </h2>
 
               <p>
-                Manage the users assigned to you.
+                Manage users and track their assigned tasks.
               </p>
 
             </div>
@@ -767,13 +836,19 @@
           >
 
             <div class="empty-state full-width">
-              <div class="empty-icon">👥</div>
 
-              <h4>No users found</h4>
+              <div class="empty-icon">
+                👥
+              </div>
+
+              <h4>
+                No users found
+              </h4>
 
               <p>
                 Create your first user to assign tasks.
               </p>
+
             </div>
 
           </div>
@@ -795,7 +870,9 @@
 
             <div>
 
-              <h2>Tasks</h2>
+              <h2>
+                Tasks
+              </h2>
 
               <p>
                 View and manage assigned tasks.
@@ -819,7 +896,9 @@
 
             <div class="search-box">
 
-              <span>⌕</span>
+              <span>
+                ⌕
+              </span>
 
               <input
                 id="taskSearch"
@@ -865,9 +944,14 @@
             >
 
               <div class="empty-state">
-                <div class="empty-icon">✓</div>
 
-                <h4>No tasks found</h4>
+                <div class="empty-icon">
+                  ✓
+                </div>
+
+                <h4>
+                  No tasks found
+                </h4>
 
                 <p>
                   Tasks will appear here.
@@ -896,7 +980,9 @@
 
             <div>
 
-              <h2>Progress Reports</h2>
+              <h2>
+                Progress Reports
+              </h2>
 
               <p>
                 Track user performance and task completion.
@@ -918,7 +1004,9 @@
 
                 <div>
 
-                  <h3>Overall Performance</h3>
+                  <h3>
+                    Overall Performance
+                  </h3>
 
                   <p>
                     Task completion overview
@@ -935,14 +1023,20 @@
               >
 
                 <div class="empty-state">
-                  <div class="empty-icon">▥</div>
 
-                  <h4>No progress data</h4>
+                  <div class="empty-icon">
+                    ▥
+                  </div>
+
+                  <h4>
+                    No progress data
+                  </h4>
 
                   <p>
                     Progress information will appear
                     when tasks are completed.
                   </p>
+
                 </div>
 
               </div>
@@ -968,7 +1062,9 @@
 
             <div>
 
-              <h2>My Profile</h2>
+              <h2>
+                My Profile
+              </h2>
 
               <p>
                 View your account information.
@@ -1092,10 +1188,12 @@
 
         <div>
 
-          <h3>Create New User</h3>
+          <h3>
+            Create New User
+          </h3>
 
           <p>
-            Create a login account for a user.
+            Create a login account for a student.
           </p>
 
         </div>
@@ -1104,6 +1202,7 @@
           type="button"
           class="modal-close"
           data-close-modal="userModal"
+          aria-label="Close"
         >
           ×
         </button>
@@ -1122,7 +1221,8 @@
           <input
             id="userName"
             type="text"
-            placeholder="Enter user's name"
+            placeholder="Enter student's name"
+            autocomplete="name"
             required
           >
 
@@ -1138,7 +1238,8 @@
           <input
             id="userEmail"
             type="email"
-            placeholder="Enter user's email"
+            placeholder="Enter student's email"
+            autocomplete="email"
             required
           >
 
@@ -1157,6 +1258,7 @@
               id="userPassword"
               type="password"
               placeholder="Minimum 6 characters"
+              autocomplete="new-password"
               minlength="6"
               required
             >
@@ -1225,7 +1327,9 @@
 
         <div>
 
-          <h3>Assign New Task</h3>
+          <h3>
+            Assign New Task
+          </h3>
 
           <p>
             Create and assign a task to a user.
@@ -1237,6 +1341,7 @@
           type="button"
           class="modal-close"
           data-close-modal="taskModal"
+          aria-label="Close"
         >
           ×
         </button>
@@ -1352,9 +1457,13 @@
   <div
     id="toast"
     class="toast hidden"
+    role="status"
+    aria-live="polite"
   >
 
-    <span id="toastIcon">✓</span>
+    <span id="toastIcon">
+      ✓
+    </span>
 
     <span id="toastMessage">
       Done
@@ -1374,4 +1483,4 @@
   ></script>
 
 </body>
-            </html>
+  </html>
