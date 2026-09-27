@@ -1,10 +1,11 @@
 // ============================================================
 // TASK MANAGER
-// Version 1.0.4
-// Complete Application
+// Version 1.0.5
+// Complete Application Logic
 // ============================================================
 
 import {
+  app,
   auth,
   db
 } from "./firebase.js";
@@ -18,6 +19,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 import {
+  getFirestore,
   collection,
   doc,
   getDoc,
@@ -25,6 +27,7 @@ import {
   setDoc,
   addDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -32,12 +35,15 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 import {
-  initializeApp,
-  getApps
+  initializeApp as initializeSecondaryApp,
+  deleteApp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 
 import {
-  getAuth
+  getAuth as getSecondaryAuth,
+  createUserWithEmailAndPassword as createSecondaryUser,
+  updateProfile as updateSecondaryProfile,
+  signOut as signOutSecondary
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 
@@ -45,53 +51,7 @@ import {
 // VERSION
 // ============================================================
 
-const VERSION = "1.0.4";
-
-
-// ============================================================
-// SECONDARY FIREBASE APP
-// Used for creating students without logging admin out
-// ============================================================
-
-let secondaryApp = null;
-let secondaryAuth = null;
-
-try {
-
-  const secondaryName = "TaskManagerSecondary";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyDFgxlX2eJ5nFVY7fQXllQG2YNTGe3lIE",
-    authDomain: "task-manager-d203c.firebaseapp.com",
-    projectId: "task-manager-d203c",
-    storageBucket: "task-manager-d203c.firebasestorage.app",
-    messagingSenderId: "1018005160470",
-    appId: "1:1018005160470:web:32cbbdbc0f7cf65df9eb37"
-  };
-
-  const existing =
-    getApps().find(
-      app => app.name === secondaryName
-    );
-
-  secondaryApp =
-    existing ||
-    initializeApp(
-      firebaseConfig,
-      secondaryName
-    );
-
-  secondaryAuth =
-    getAuth(secondaryApp);
-
-} catch (error) {
-
-  console.error(
-    "Secondary Firebase initialization error:",
-    error
-  );
-
-}
+const VERSION = "v1.0.5";
 
 
 // ============================================================
@@ -99,169 +59,176 @@ try {
 // ============================================================
 
 const state = {
-
   user: null,
-
   profile: null,
 
   users: [],
-
   tasks: [],
 
+  selectedStudentId: null,
   currentPage: "dashboard",
 
-  selectedStudentId: null,
-
   loading: false
-
 };
 
 
 // ============================================================
-// HELPERS
+// BASIC HELPERS
 // ============================================================
 
-function $(id) {
-  return document.getElementById(id);
+const $ = (id) => document.getElementById(id);
+
+function escapeHTML(value) {
+  if (value === null || value === undefined) return "";
+
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 
-function show(id) {
+function getName(user) {
+  if (!user) return "User";
 
-  const element = $(id);
+  return (
+    user.name ||
+    user.displayName ||
+    user.email ||
+    "User"
+  );
+}
 
-  if (element) {
-    element.classList.remove("hidden");
+
+function getRole(user) {
+  if (!user) return "";
+
+  return user.role || "";
+}
+
+
+function formatDate(value) {
+  if (!value) return "—";
+
+  try {
+    let date;
+
+    if (value?.toDate) {
+      date = value.toDate();
+    } else if (value instanceof Date) {
+      date = value;
+    } else {
+      date = new Date(value);
+    }
+
+    if (isNaN(date.getTime())) return "—";
+
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+  } catch {
+    return "—";
   }
-
 }
 
 
-function hide(id) {
+function formatDateTime(value) {
+  if (!value) return "—";
 
-  const element = $(id);
+  try {
+    let date;
 
-  if (element) {
-    element.classList.add("hidden");
+    if (value?.toDate) {
+      date = value.toDate();
+    } else if (value instanceof Date) {
+      date = value;
+    } else {
+      date = new Date(value);
+    }
+
+    if (isNaN(date.getTime())) return "—";
+
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  } catch {
+    return "—";
   }
-
 }
 
 
-function message(
-  id,
-  text,
-  type = "error"
-) {
+function getTaskDate(task) {
+  return task.assignedAt || task.createdAt || null;
+}
 
-  const element = $(id);
 
-  if (!element) {
+function getStatusText(status) {
+  const map = {
+    pending: "Pending",
+    accepted: "Accepted",
+    in_progress: "In Progress",
+    completed: "Completed"
+  };
+
+  return map[status] || "Pending";
+}
+
+
+function getStatusClass(status) {
+  if (status === "completed") return "completed";
+  if (status === "in_progress") return "in-progress";
+  if (status === "accepted") return "accepted";
+
+  return "pending";
+}
+
+
+function showToast(message, type = "success") {
+  const toast = $("toast");
+
+  if (!toast) {
+    console.log(message);
     return;
   }
 
-  element.textContent = text;
+  const icon = $("toastIcon");
+  const text = $("toastMessage");
 
-  element.className =
-    `form-message ${type}`;
+  if (text) text.textContent = message;
 
-}
-
-
-function toast(
-  text,
-  type = "success"
-) {
-
-  let container =
-    $("toastContainer");
-
-  if (!container) {
-
-    container =
-      document.createElement("div");
-
-    container.id =
-      "toastContainer";
-
-    container.style.position =
-      "fixed";
-
-    container.style.right =
-      "18px";
-
-    container.style.bottom =
-      "18px";
-
-    container.style.zIndex =
-      "99999";
-
-    document.body.appendChild(
-      container
-    );
-
+  if (icon) {
+    icon.textContent =
+      type === "error"
+        ? "✕"
+        : type === "warning"
+          ? "!"
+          : "✓";
   }
 
-  const item =
-    document.createElement("div");
+  toast.classList.add("show");
 
-  item.textContent = text;
+  clearTimeout(window.__toastTimer);
 
-  item.style.padding =
-    "12px 16px";
-
-  item.style.marginTop =
-    "8px";
-
-  item.style.borderRadius =
-    "10px";
-
-  item.style.background =
-    type === "error"
-      ? "#ef4444"
-      : "#4f46e5";
-
-  item.style.color =
-    "#ffffff";
-
-  item.style.fontSize =
-    "13px";
-
-  item.style.boxShadow =
-    "0 8px 25px rgba(0,0,0,.15)";
-
-  container.appendChild(item);
-
-  setTimeout(() => {
-
-    item.remove();
-
+  window.__toastTimer = setTimeout(() => {
+    toast.classList.remove("show");
   }, 3000);
-
-}
-
-
-function escapeHTML(value) {
-
-  return String(
-    value ?? ""
-  )
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-
 }
 
 
 function firebaseError(error) {
+  console.error(error);
 
-  const code =
-    error?.code || "";
+  const code = error?.code || "";
 
   const messages = {
-
     "auth/email-already-in-use":
       "This email is already registered.",
 
@@ -269,23 +236,28 @@ function firebaseError(error) {
       "Please enter a valid email address.",
 
     "auth/weak-password":
-      "Password must contain at least 6 characters.",
-
-    "auth/user-not-found":
-      "No account found with this email.",
-
-    "auth/wrong-password":
-      "Incorrect email or password.",
+      "Password must be at least 6 characters.",
 
     "auth/invalid-credential":
-      "Incorrect email or password.",
+      "Invalid email or password.",
+
+    "auth/user-not-found":
+      "No account was found with this email.",
+
+    "auth/wrong-password":
+      "Incorrect password.",
 
     "auth/network-request-failed":
       "Network error. Please check your internet connection.",
 
     "permission-denied":
-      "You do not have permission for this action."
+      "You do not have permission for this action.",
 
+    "failed-precondition":
+      "Firestore needs an index. Please try again.",
+
+    "unavailable":
+      "Firebase is temporarily unavailable."
   };
 
   return (
@@ -293,248 +265,225 @@ function firebaseError(error) {
     error?.message ||
     "Something went wrong. Please try again."
   );
+}
 
+
+function setMessage(id, message, type = "") {
+  const el = $(id);
+
+  if (!el) return;
+
+  el.textContent = message;
+
+  el.className = "";
+
+  if (type) {
+    el.classList.add(type);
+  }
+}
+
+
+function closeModal(id) {
+  const modal = $(id);
+
+  if (!modal) return;
+
+  modal.classList.remove("show");
+  modal.style.display = "";
+}
+
+
+function openModal(id) {
+  const modal = $(id);
+
+  if (!modal) return;
+
+  modal.classList.add("show");
+  modal.style.display = "flex";
 }
 
 
 // ============================================================
-// LOADER
+// SIDEBAR / PAGE NAVIGATION
 // ============================================================
 
-function hideLoader() {
+function showPage(page) {
+  state.currentPage = page;
 
-  const loader =
-    $("appLoader");
+  const pages = [
+    "dashboardPage",
+    "usersPage",
+    "tasksPage",
+    "progressPage",
+    "profilePage"
+  ];
 
-  if (loader) {
-    loader.classList.add("hidden");
+  pages.forEach(id => {
+    const el = $(id);
+
+    if (!el) return;
+
+    const shouldShow = id === `${page}Page`;
+
+    el.style.display = shouldShow ? "" : "none";
+    el.classList.toggle("active", shouldShow);
+  });
+
+  document.querySelectorAll("[data-page]").forEach(item => {
+    item.classList.toggle(
+      "active",
+      item.dataset.page === page
+    );
+  });
+
+  if (page === "dashboard") {
+    updateDashboard();
   }
 
+  if (page === "users") {
+    renderUsers();
+  }
+
+  if (page === "tasks") {
+    renderTasks();
+  }
+
+  if (page === "progress") {
+    renderProgress();
+  }
+
+  if (page === "profile") {
+    renderProfile();
+  }
+
+  closeSidebarMobile();
 }
 
 
-// ============================================================
-// PASSWORD TOGGLE
-// ============================================================
+function closeSidebarMobile() {
+  document.body.classList.remove("sidebar-open");
 
-function setupPasswordToggles() {
+  const sidebar = document.querySelector(".sidebar");
 
-  document
-    .querySelectorAll(
-      "[data-password-toggle]"
-    )
-    .forEach(button => {
+  if (sidebar) {
+    sidebar.classList.remove("open");
+  }
+}
 
-      button.addEventListener(
-        "click",
-        () => {
 
-          const targetId =
-            button.dataset.passwordToggle;
+function setupNavigation() {
+  document.querySelectorAll("[data-page]").forEach(item => {
+    item.addEventListener("click", () => {
+      const page = item.dataset.page;
 
-          const input =
-            $(targetId);
+      if (!page) return;
 
-          if (!input) {
-            return;
-          }
-
-          input.type =
-            input.type === "password"
-              ? "text"
-              : "password";
-
-        }
-      );
-
+      showPage(page);
     });
+  });
 
+  const usersNav = $("usersNavItem");
+
+  if (usersNav) {
+    usersNav.addEventListener("click", () => {
+      showPage("users");
+    });
+  }
+
+  const progressNav = $("progressNavItem");
+
+  if (progressNav) {
+    progressNav.addEventListener("click", () => {
+      showPage("progress");
+    });
+  }
 }
 
 
 // ============================================================
-// LOGIN
+// AUTH
 // ============================================================
 
 async function loginUser(event) {
-
   event.preventDefault();
 
-  const email =
-    $("loginEmail")
-      ?.value
-      .trim();
+  const email = $("loginEmail")?.value.trim();
+  const password = $("loginPassword")?.value;
 
-  const password =
-    $("loginPassword")
-      ?.value;
-
-  message(
-    "loginMessage",
-    ""
-  );
-
-  if (!email) {
-
-    message(
+  if (!email || !password) {
+    setMessage(
       "loginMessage",
-      "Please enter your email."
+      "Please enter email and password.",
+      "error"
     );
 
     return;
   }
 
-  if (!password) {
-
-    message(
-      "loginMessage",
-      "Please enter your password."
-    );
-
-    return;
-  }
-
-  const button =
-    event.submitter;
-
-  if (button) {
-
-    button.disabled = true;
-
-    button.textContent =
-      "Signing in...";
-
-  }
+  setMessage("loginMessage", "Signing in...");
 
   try {
-
     await signInWithEmailAndPassword(
       auth,
       email,
       password
     );
 
-    toast(
-      "Login successful."
-    );
+    setMessage("loginMessage", "");
 
+    showToast("Login successful.");
   } catch (error) {
-
-    console.error(
-      "Login error:",
-      error
-    );
-
-    message(
+    setMessage(
       "loginMessage",
-      firebaseError(error)
+      firebaseError(error),
+      "error"
     );
-
-  } finally {
-
-    if (button) {
-
-      button.disabled =
-        false;
-
-      button.textContent =
-        "Login";
-
-    }
-
   }
-
 }
 
 
-// ============================================================
-// REGISTER ADMIN
-// ============================================================
-
 async function registerAdmin(event) {
-
   event.preventDefault();
 
-  const name =
-    $("registerName")
-      ?.value
-      .trim();
-
-  const email =
-    $("registerEmail")
-      ?.value
-      .trim();
-
-  const password =
-    $("registerPassword")
-      ?.value;
-
+  const name = $("registerName")?.value.trim();
+  const email = $("registerEmail")?.value.trim();
+  const password = $("registerPassword")?.value;
   const confirmPassword =
-    $("registerConfirmPassword")
-      ?.value;
+    $("registerConfirmPassword")?.value;
 
-  message(
-    "registerMessage",
-    ""
-  );
-
-  if (!name) {
-
-    message(
+  if (!name || !email || !password || !confirmPassword) {
+    setMessage(
       "registerMessage",
-      "Please enter your name."
+      "Please fill in all fields.",
+      "error"
     );
 
     return;
   }
 
-  if (!email) {
-
-    message(
+  if (password !== confirmPassword) {
+    setMessage(
       "registerMessage",
-      "Please enter your email."
+      "Passwords do not match.",
+      "error"
     );
 
     return;
   }
 
-  if (!password || password.length < 6) {
-
-    message(
+  if (password.length < 6) {
+    setMessage(
       "registerMessage",
-      "Password must contain at least 6 characters."
+      "Password must be at least 6 characters.",
+      "error"
     );
 
     return;
   }
 
-  if (
-    password !==
-    confirmPassword
-  ) {
-
-    message(
-      "registerMessage",
-      "Passwords do not match."
-    );
-
-    return;
-  }
-
-  const button =
-    event.submitter;
-
-  if (button) {
-
-    button.disabled = true;
-
-    button.textContent =
-      "Creating Account...";
-
-  }
+  setMessage("registerMessage", "Creating account...");
 
   try {
-
     const credential =
       await createUserWithEmailAndPassword(
         auth,
@@ -542,340 +491,215 @@ async function registerAdmin(event) {
         password
       );
 
-    const user =
-      credential.user;
+    const newUser = credential.user;
 
-    await updateProfile(
-      user,
-      {
-        displayName:
-          name
-      }
-    );
+    await updateProfile(newUser, {
+      displayName: name
+    });
 
     await setDoc(
-      doc(
-        db,
-        "users",
-        user.uid
-      ),
+      doc(db, "users", newUser.uid),
       {
-
-        uid:
-          user.uid,
-
+        uid: newUser.uid,
         name,
-
         email,
-
-        role:
-          "admin",
-
-        active:
-          true,
-
-        createdAt:
-          serverTimestamp()
-
+        role: "admin",
+        active: true,
+        createdAt: serverTimestamp()
       }
     );
 
-    toast(
+    setMessage(
+      "registerMessage",
       "Admin account created successfully."
     );
 
-    await loadProfile(
-      user
-    );
+    showToast("Admin account created.");
 
-    showPage(
-      "dashboard"
-    );
-
-  } catch (error) {
-
-    console.error(
-      "Register error:",
-      error
-    );
-
-    message(
-      "registerMessage",
-      firebaseError(error)
-    );
-
-  } finally {
-
-    if (button) {
-
-      button.disabled =
-        false;
-
-      button.textContent =
-        "Register";
-
+    if ($("registerForm")) {
+      $("registerForm").reset();
     }
 
+    setTimeout(() => {
+      showLoginPanel();
+    }, 800);
+
+  } catch (error) {
+    setMessage(
+      "registerMessage",
+      firebaseError(error),
+      "error"
+    );
+  }
+}
+
+
+function showLoginPanel() {
+  const loginPanel = $("loginPanel");
+  const registerPanel = $("registerPanel");
+
+  if (loginPanel) {
+    loginPanel.style.display = "";
   }
 
+  if (registerPanel) {
+    registerPanel.style.display = "none";
+  }
 }
 
 
-// ============================================================
-// AUTH SCREEN
-// ============================================================
+function showRegisterPanel() {
+  const loginPanel = $("loginPanel");
+  const registerPanel = $("registerPanel");
 
-function showLogin() {
-
-  hide(
-    "registerScreen"
-  );
-
-  show(
-    "loginScreen"
-  );
-
-}
-
-
-function showRegister() {
-
-  hide(
-    "loginScreen"
-  );
-
-  show(
-    "registerScreen"
-  );
-
-}
-
-
-// ============================================================
-// LOAD PROFILE
-// ============================================================
-
-async function loadProfile(
-  firebaseUser
-) {
-
-  const ref =
-    doc(
-      db,
-      "users",
-      firebaseUser.uid
-    );
-
-  const snapshot =
-    await getDoc(ref);
-
-  if (!snapshot.exists()) {
-
-    throw new Error(
-      "User profile not found."
-    );
-
+  if (loginPanel) {
+    loginPanel.style.display = "none";
   }
 
-  state.profile = {
-    id:
-      snapshot.id,
-
-    ...snapshot.data()
-  };
-
+  if (registerPanel) {
+    registerPanel.style.display = "";
+  }
 }
 
 
-// ============================================================
-// START APPLICATION
-// ============================================================
-
-async function startApplication(
-  firebaseUser
-) {
-
-  state.user =
-    firebaseUser;
-
-  await loadProfile(
-    firebaseUser
-  );
-
-  if (
-    state.profile.active === false
-  ) {
-
+async function logoutUser() {
+  try {
     await signOut(auth);
-
-    throw new Error(
-      "This account is inactive."
-    );
-
+  } catch (error) {
+    showToast(firebaseError(error), "error");
   }
+}
 
-  hide(
-    "authScreen"
+
+// ============================================================
+// PROFILE
+// ============================================================
+
+async function loadProfile() {
+  if (!state.user) return;
+
+  const profileRef = doc(
+    db,
+    "users",
+    state.user.uid
   );
 
-  show(
-    "mainApp"
-  );
+  const snapshot = await getDoc(profileRef);
+
+  if (snapshot.exists()) {
+    state.profile = {
+      id: snapshot.id,
+      ...snapshot.data()
+    };
+  } else {
+    state.profile = {
+      uid: state.user.uid,
+      name: state.user.displayName || "User",
+      email: state.user.email || "",
+      role: "student",
+      active: true
+    };
+  }
 
   updateUserUI();
-
-  await loadUsers();
-
-  await loadTasks();
-
-  showPage(
-    state.currentPage || "dashboard"
-  );
-
 }
 
 
-// ============================================================
-// USER UI
-// ============================================================
-
 function updateUserUI() {
+  const profile = state.profile || {};
+  const authUser = state.user || {};
 
   const name =
-    state.profile?.name ||
-    state.user?.displayName ||
+    profile.name ||
+    authUser.displayName ||
+    authUser.email ||
     "User";
 
   const email =
-    state.profile?.email ||
-    state.user?.email ||
+    profile.email ||
+    authUser.email ||
     "";
 
-  document
-    .querySelectorAll(
-      "[data-user-name]"
-    )
-    .forEach(
-      element => {
-        element.textContent =
-          name;
-      }
-    );
+  const role =
+    profile.role ||
+    "student";
 
-  document
-    .querySelectorAll(
-      "[data-user-email]"
-    )
-    .forEach(
-      element => {
-        element.textContent =
-          email;
-      }
-    );
+  const roleText =
+    role.charAt(0).toUpperCase() +
+    role.slice(1);
 
-  document
-    .querySelectorAll(
-      "[data-user-role]"
-    )
-    .forEach(
-      element => {
+  document.querySelectorAll(
+    "[data-user-name]"
+  ).forEach(el => {
+    el.textContent = name;
+  });
 
-        element.textContent =
-          state.profile?.role ||
-          "";
+  document.querySelectorAll(
+    "[data-user-email]"
+  ).forEach(el => {
+    el.textContent = email;
+  });
 
-      }
-    );
+  document.querySelectorAll(
+    "[data-user-role]"
+  ).forEach(el => {
+    el.textContent = roleText;
+  });
 
-  const version =
-    $("appVersion");
+  const nameIds = [
+    "headerUserName",
+    "sidebarName",
+    "profileName",
+    "profileNameDetail"
+  ];
 
-  if (version) {
-    version.textContent =
-      `v${VERSION}`;
+  nameIds.forEach(id => {
+    const el = $(id);
+
+    if (el) el.textContent = name;
+  });
+
+  const roleIds = [
+    "headerUserRole",
+    "sidebarRole",
+    "profileRole",
+    "profileRoleDetail"
+  ];
+
+  roleIds.forEach(id => {
+    const el = $(id);
+
+    if (el) el.textContent = roleText;
+  });
+
+  const emailEl = $("profileEmail");
+
+  if (emailEl) {
+    emailEl.textContent = email;
   }
 
+  const statusEl = $("profileStatus");
+
+  if (statusEl) {
+    statusEl.textContent =
+      profile.active === false
+        ? "Inactive"
+        : "Active";
+  }
+
+  const versionEls =
+    document.querySelectorAll(
+      "#appVersion, [data-app-version]"
+    );
+
+  versionEls.forEach(el => {
+    el.textContent = `Task Manager ${VERSION}`;
+  });
 }
 
 
-// ============================================================
-// PAGE NAVIGATION
-// ============================================================
-
-function showPage(page) {
-
-  state.currentPage =
-    page;
-
-  document
-    .querySelectorAll(
-      "[data-page]"
-    )
-    .forEach(
-      element => {
-
-        const target =
-          element.dataset.page;
-
-        element.classList.toggle(
-          "active",
-          target === page
-        );
-
-      }
-    );
-
-  document
-    .querySelectorAll(
-      ".page"
-    )
-    .forEach(
-      element => {
-
-        element.classList.add(
-          "hidden"
-        );
-
-      }
-    );
-
-  const pageElement =
-    $(`${page}Page`);
-
-  if (pageElement) {
-
-    pageElement.classList.remove(
-      "hidden"
-    );
-
-  }
-
-  closeMobileSidebar();
-
-  if (page === "dashboard") {
-
-    updateDashboard();
-
-  }
-
-  if (page === "tasks") {
-
-    renderTasks();
-
-  }
-
-  if (page === "users") {
-
-    renderUsers();
-
-  }
-
-  if (page === "progress") {
-
-    renderProgress();
-
-  }
-
+function renderProfile() {
+  updateUserUI();
 }
 
 
@@ -884,1092 +708,55 @@ function showPage(page) {
 // ============================================================
 
 async function loadUsers() {
+  if (!state.profile) return;
 
   try {
-
-    const role =
-      state.profile?.role;
-
-    let snapshot;
-
     if (
-      role === "admin" ||
-      role === "superadmin"
+      state.profile.role === "admin" ||
+      state.profile.role === "superadmin"
     ) {
+      const usersQuery = query(
+        collection(db, "users"),
+        where("role", "==", "student")
+      );
 
-      const q =
-        query(
-          collection(
-            db,
-            "users"
-          ),
-          where(
-            "role",
-            "==",
-            "student"
-          )
-        );
+      const snapshot = await getDocs(usersQuery);
 
-      snapshot =
-        await getDocs(q);
+      state.users = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
 
     } else {
-
-      snapshot =
-        await getDocs(
-          query(
-            collection(
-              db,
-              "users"
-            ),
-            where(
-              "uid",
-              "==",
-              state.user.uid
-            )
-          )
-        );
-
-    }
-
-    state.users =
-      snapshot.docs.map(
-        item => ({
-          id:
-            item.id,
-          ...item.data()
-        })
-      );
-
-  } catch (error) {
-
-    console.error(
-      "Load users error:",
-      error
-    );
-
-    state.users = [];
-
-    toast(
-      firebaseError(error),
-      "error"
-    );
-
-  }
-
-}
-
-
-// ============================================================
-// LOAD TASKS
-// ============================================================
-
-async function loadTasks() {
-
-  try {
-
-    const role =
-      state.profile?.role;
-
-    if (
-      role === "admin" ||
-      role === "superadmin"
-    ) {
-
-      let snapshot;
-
-      try {
-
-        const q =
-          query(
-            collection(
-              db,
-              "tasks"
-            ),
-            orderBy(
-              "assignedAt",
-              "desc"
-            )
-          );
-
-        snapshot =
-          await getDocs(q);
-
-      } catch (error) {
-
-        // Fallback if index is not yet available
-        snapshot =
-          await getDocs(
-            collection(
-              db,
-              "tasks"
-            )
-          );
-
-      }
-
-      state.tasks =
-        snapshot.docs.map(
-          item => ({
-            id:
-              item.id,
-            ...item.data()
-          })
-        );
-
-      state.tasks.sort(
-        (a, b) => {
-
-          const aTime =
-            a.assignedAt?.seconds ||
-            0;
-
-          const bTime =
-            b.assignedAt?.seconds ||
-            0;
-
-          return bTime - aTime;
-
-        }
-      );
-
-    } else {
-
-      const q =
-        query(
-          collection(
-            db,
-            "tasks"
-          ),
-          where(
-            "assignedTo",
-            "==",
-            state.user.uid
-          )
-        );
-
-      const snapshot =
-        await getDocs(q);
-
-      state.tasks =
-        snapshot.docs.map(
-          item => ({
-            id:
-              item.id,
-            ...item.data()
-          })
-        );
-
-      state.tasks.sort(
-        (a, b) => {
-
-          const aTime =
-            a.assignedAt?.seconds ||
-            0;
-
-          const bTime =
-            b.assignedAt?.seconds ||
-            0;
-
-          return bTime - aTime;
-
-        }
-      );
-
-    }
-
-  } catch (error) {
-
-    console.error(
-      "Load tasks error:",
-      error
-    );
-
-    state.tasks = [];
-
-    toast(
-      firebaseError(error),
-      "error"
-    );
-
-  }
-
-}
-
-
-// ============================================================
-// DATE HELPERS
-// ============================================================
-
-function timestampToDate(
-  value
-) {
-
-  if (!value) {
-    return null;
-  }
-
-  if (
-    typeof value.toDate ===
-    "function"
-  ) {
-
-    return value.toDate();
-
-  }
-
-  if (
-    value.seconds
-  ) {
-
-    return new Date(
-      value.seconds * 1000
-    );
-
-  }
-
-  if (
-    typeof value ===
-    "string"
-  ) {
-
-    return new Date(value);
-
-  }
-
-  return null;
-
-}
-
-
-function formatDate(
-  value
-) {
-
-  const date =
-    timestampToDate(value);
-
-  if (!date) {
-    return "—";
-  }
-
-  return date.toLocaleDateString(
-    undefined,
-    {
-      day:
-        "2-digit",
-      month:
-        "short",
-      year:
-        "numeric"
-    }
-  );
-
-}
-
-
-function formatDateTime(
-  value
-) {
-
-  const date =
-    timestampToDate(value);
-
-  if (!date) {
-    return "—";
-  }
-
-  return date.toLocaleString(
-    undefined,
-    {
-      day:
-        "2-digit",
-      month:
-        "short",
-      year:
-        "numeric",
-      hour:
-        "2-digit",
-      minute:
-        "2-digit"
-    }
-  );
-
-}
-
-
-// ============================================================
-// DURATION
-// ============================================================
-
-function formatDuration(
-  milliseconds
-) {
-
-  const ms =
-    Number(milliseconds) || 0;
-
-  const seconds =
-    Math.floor(
-      ms / 1000
-    );
-
-  if (seconds < 60) {
-
-    return `${seconds}s`;
-
-  }
-
-  const minutes =
-    Math.floor(
-      seconds / 60
-    );
-
-  const remainingSeconds =
-    seconds % 60;
-
-  if (minutes < 60) {
-
-    return `${minutes}m ${remainingSeconds}s`;
-
-  }
-
-  const hours =
-    Math.floor(
-      minutes / 60
-    );
-
-  const remainingMinutes =
-    minutes % 60;
-
-  return `${hours}h ${remainingMinutes}m`;
-
-}
-
-
-// ============================================================
-// STATUS
-// ============================================================
-
-function statusClass(
-  status
-) {
-
-  return `status-${status || "pending"}`;
-
-}
-
-
-function statusLabel(
-  status
-) {
-
-  const labels = {
-
-    pending:
-      "Pending",
-
-    accepted:
-      "Accepted",
-
-    in_progress:
-      "In Progress",
-
-    completed:
-      "Completed"
-
-  };
-
-  return (
-    labels[status] ||
-    "Pending"
-  );
-
-}
-
-
-// ============================================================
-// USER NAME
-// ============================================================
-
-function getUserName(
-  uid
-) {
-
-  const user =
-    state.users.find(
-      item =>
-        (item.uid || item.id) === uid
-    );
-
-  return (
-    user?.name ||
-    "Student"
-  );
-
-}
-
-
-function getAssignerName(
-  task
-) {
-
-  return (
-    task?.assignedByName ||
-    "Admin"
-  );
-
-}
-
-
-// ============================================================
-// DASHBOARD
-// ============================================================
-
-function updateDashboard() {
-
-  const role =
-    state.profile?.role;
-
-  const totalTasks =
-    state.tasks.length;
-
-  const completedTasks =
-    state.tasks.filter(
-      task =>
-        task.status ===
-        "completed"
-    ).length;
-
-  const pendingTasks =
-    state.tasks.filter(
-      task =>
-        task.status ===
-        "pending"
-    ).length;
-
-  const activeTasks =
-    state.tasks.filter(
-      task =>
-        task.status ===
-          "accepted" ||
-        task.status ===
-          "in_progress"
-    ).length;
-
-  setText(
-    "totalTasks",
-    totalTasks
-  );
-
-  setText(
-    "completedTasks",
-    completedTasks
-  );
-
-  setText(
-    "pendingTasks",
-    pendingTasks
-  );
-
-  setText(
-    "activeTasks",
-    activeTasks
-  );
-
-  setText(
-    "totalUsers",
-    state.users.length
-  );
-
-  renderRecentTasks();
-
-}
-
-
-function setText(
-  id,
-  value
-) {
-
-  const element =
-    $(id);
-
-  if (element) {
-    element.textContent =
-      value;
-  }
-
-}
-
-
-// ============================================================
-// RECENT TASKS
-// ============================================================
-
-function renderRecentTasks() {
-
-  const container =
-    $("recentTasks");
-
-  if (!container) {
-    return;
-  }
-
-  const tasks =
-    state.tasks.slice(
-      0,
-      5
-    );
-
-  if (!tasks.length) {
-
-    container.innerHTML =
-      emptyHTML(
-        "✓",
-        "No tasks yet",
-        "Tasks will appear here when they are assigned."
-      );
-
-    return;
-  }
-
-  container.innerHTML =
-    tasks.map(
-      task => {
-
-        const studentName =
-          task.assignedToName ||
-          getUserName(
-            task.assignedTo
-          );
-
-        return `
-
-          <div class="task-row">
-
-            <div class="task-row-main">
-
-              <strong>
-                ${escapeHTML(
-                  task.title ||
-                  "Untitled Task"
-                )}
-              </strong>
-
-              <span>
-                ${escapeHTML(
-                  studentName
-                )}
-              </span>
-
-            </div>
-
-            <span class="
-              status-badge
-              ${statusClass(task.status)}
-            ">
-              ${escapeHTML(
-                statusLabel(task.status)
-              )}
-            </span>
-
-          </div>
-
-        `;
-
-      }
-    ).join("");
-
-}
-
-
-// ============================================================
-// TASK HTML
-// ============================================================
-
-function taskHTML(
-  task
-) {
-
-  const role =
-    state.profile?.role;
-
-  const studentName =
-    task.assignedToName ||
-    getUserName(
-      task.assignedTo
-    );
-
-  const assignerName =
-    getAssignerName(
-      task
-    );
-
-  let actionHTML = "";
-
-  if (
-    role === "student" &&
-    task.assignedTo ===
-      state.user.uid
-  ) {
-
-    if (
-      task.status ===
-      "pending"
-    ) {
-
-      actionHTML = `
-        <button
-          class="btn btn-primary"
-          data-task-action="accept"
-          data-task-id="${escapeHTML(task.id)}"
-        >
-          Accept
-        </button>
-      `;
-
-    } else if (
-      task.status ===
-      "accepted"
-    ) {
-
-      actionHTML = `
-        <button
-          class="btn btn-primary"
-          data-task-action="start"
-          data-task-id="${escapeHTML(task.id)}"
-        >
-          Start Task
-        </button>
-      `;
-
-    } else if (
-      task.status ===
-      "in_progress"
-    ) {
-
-      actionHTML = `
-        <button
-          class="btn btn-primary"
-          data-task-action="complete"
-          data-task-id="${escapeHTML(task.id)}"
-        >
-          Complete
-        </button>
-      `;
-
-    }
-
-  }
-
-  return `
-
-    <div
-      class="task-card"
-      data-task-id="${escapeHTML(task.id)}"
-    >
-
-      <div class="task-card-header">
-
-        <div>
-
-          <h4>
-            ${escapeHTML(
-              task.title ||
-              "Untitled Task"
-            )}
-          </h4>
-
-          <span>
-            ${formatDateTime(
-              task.assignedAt
-            )}
-          </span>
-
-        </div>
-
-        <span class="
-          status-badge
-          ${statusClass(task.status)}
-        ">
-          ${escapeHTML(
-            statusLabel(task.status)
-          )}
-        </span>
-
-      </div>
-
-      <p>
-        ${escapeHTML(
-          task.description ||
-          ""
-        )}
-      </p>
-
-      <div
-        style="
-          display:grid;
-          gap:5px;
-          margin-top:10px;
-          font-size:12px;
-          color:#667085;
-        "
-      >
-
-        <div>
-          <strong>Assigned to:</strong>
-          ${escapeHTML(studentName)}
-        </div>
-
-        <div>
-          <strong>Assigned by:</strong>
-          ${escapeHTML(assignerName)}
-        </div>
-
-        <div>
-          <strong>Due date:</strong>
-          ${escapeHTML(
-            task.dueDate ||
-            "No due date"
-          )}
-        </div>
-
-        ${
-          task.durationMs
-            ? `
-              <div>
-                <strong>Duration:</strong>
-                ${escapeHTML(
-                  formatDuration(
-                    task.durationMs
-                  )
-                )}
-              </div>
-            `
-            : ""
-        }
-
-      </div>
-
-      ${
-        actionHTML
-          ? `
-            <div
-              class="task-actions"
-              style="margin-top:12px;"
-            >
-              ${actionHTML}
-            </div>
-          `
-          : ""
-      }
-
-    </div>
-
-  `;
-
-}
-
-
-// ============================================================
-// TASK ACTIONS
-// ============================================================
-
-async function acceptTask(
-  taskId
-) {
-
-  const task =
-    state.tasks.find(
-      item =>
-        item.id === taskId
-    );
-
-  if (!task) {
-    return;
-  }
-
-  if (
-    task.assignedTo !==
-    state.user.uid
-  ) {
-    return;
-  }
-
-  try {
-
-    await updateDoc(
-      doc(
+      const ownRef = doc(
         db,
-        "tasks",
-        taskId
-      ),
-      {
-
-        status:
-          "accepted",
-
-        acceptedAt:
-          serverTimestamp()
-
-      }
-    );
-
-    await loadTasks();
-
-    renderTasks();
-    updateDashboard();
-    renderProgress();
-
-    toast(
-      "Task accepted."
-    );
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
-      firebaseError(error),
-      "error"
-    );
-
-  }
-
-}
-
-
-async function startTask(
-  taskId
-) {
-
-  const task =
-    state.tasks.find(
-      item =>
-        item.id === taskId
-    );
-
-  if (!task) {
-    return;
-  }
-
-  if (
-    task.assignedTo !==
-    state.user.uid
-  ) {
-    return;
-  }
-
-  try {
-
-    await updateDoc(
-      doc(
-        db,
-        "tasks",
-        taskId
-      ),
-      {
-
-        status:
-          "in_progress",
-
-        startedAt:
-          serverTimestamp()
-
-      }
-    );
-
-    await loadTasks();
-
-    renderTasks();
-    updateDashboard();
-    renderProgress();
-
-    toast(
-      "Task started."
-    );
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
-      firebaseError(error),
-      "error"
-    );
-
-  }
-
-}
-
-
-async function completeTask(
-  taskId
-) {
-
-  const task =
-    state.tasks.find(
-      item =>
-        item.id === taskId
-    );
-
-  if (!task) {
-    return;
-  }
-
-  if (
-    task.assignedTo !==
-    state.user.uid
-  ) {
-    return;
-  }
-
-  try {
-
-    const started =
-      timestampToDate(
-        task.startedAt
+        "users",
+        state.user.uid
       );
 
-    let durationMs =
-      Number(
-        task.durationMs
-      ) || 0;
+      const snapshot = await getDoc(ownRef);
 
-    if (started) {
-
-      durationMs =
-        Math.max(
-          0,
-          Date.now() -
-          started.getTime()
-        );
-
+      state.users = snapshot.exists()
+        ? [
+            {
+              id: snapshot.id,
+              ...snapshot.data()
+            }
+          ]
+        : [];
     }
 
-    await updateDoc(
-      doc(
-        db,
-        "tasks",
-        taskId
-      ),
-      {
-
-        status:
-          "completed",
-
-        completedAt:
-          serverTimestamp(),
-
-        durationMs
-
-      }
-    );
-
-    await loadTasks();
-
-    renderTasks();
-    updateDashboard();
-    renderProgress();
-
-    toast(
-      "Task completed successfully."
-    );
+    renderUsers();
+    populateTaskUsers();
 
   } catch (error) {
+    console.error("loadUsers:", error);
 
-    console.error(error);
-
-    toast(
+    showToast(
       firebaseError(error),
       "error"
     );
-
   }
-
-}
-
-
-// ============================================================
-// RENDER TASKS
-// ============================================================
-
-function renderTasks() {
-
-  const container =
-    $("tasksList");
-
-  if (!container) {
-    return;
-  }
-
-  let tasks =
-    [...state.tasks];
-
-  const search =
-    $("taskSearch")
-      ?.value
-      .trim()
-      .toLowerCase();
-
-  const status =
-    $("taskStatusFilter")
-      ?.value || "";
-
-  if (search) {
-
-    tasks =
-      tasks.filter(
-        task => {
-
-          const text =
-            [
-              task.title,
-              task.description,
-              task.assignedToName,
-              task.assignedByName
-            ]
-              .join(" ")
-              .toLowerCase();
-
-          return text.includes(
-            search
-          );
-
-        }
-      );
-
-  }
-
-  if (status) {
-
-    tasks =
-      tasks.filter(
-        task =>
-          task.status ===
-          status
-      );
-
-  }
-
-  if (!tasks.length) {
-
-    container.innerHTML =
-      emptyHTML(
-        "✓",
-        "No tasks found",
-        "There are no tasks matching your current filters."
-      );
-
-    return;
-  }
-
-  container.innerHTML =
-    tasks
-      .map(taskHTML)
-      .join("");
-
 }
 
 
@@ -1978,1511 +765,234 @@ function renderTasks() {
 // ============================================================
 
 function renderUsers() {
-
   const container =
+    $("usersContainer") ||
     $("usersList");
 
-  if (!container) {
-    return;
-  }
-
-  const students =
-    state.users.filter(
-      user =>
-        user.role ===
-        "student"
-    );
-
-  if (
-    state.profile?.role ===
-    "superadmin"
-  ) {
-
-    renderSuperAdminUsers(
-      container,
-      students
-    );
-
-    return;
-
-  }
-
-  if (!students.length) {
-
-    container.innerHTML =
-      emptyHTML(
-        "👤",
-        "No students found",
-        "Create a student account to get started."
-      );
-
-    return;
-
-  }
-
-  container.innerHTML =
-    students
-      .map(
-        student => {
-
-          const studentTasks =
-            state.tasks.filter(
-              task =>
-                task.assignedTo ===
-                student.uid
-            );
-
-          const completed =
-            studentTasks.filter(
-              task =>
-                task.status ===
-                "completed"
-            ).length;
-
-          const total =
-            studentTasks.length;
-
-          const progress =
-            total
-              ? Math.round(
-                  completed /
-                  total *
-                  100
-                )
-              : 0;
-
-          return `
-
-            <div
-              class="user-card"
-              data-user-progress="${escapeHTML(
-                student.uid ||
-                student.id
-              )}"
-              style="cursor:pointer;"
-            >
-
-              <div
-                style="
-                  display:flex;
-                  justify-content:space-between;
-                  align-items:center;
-                  gap:10px;
-                "
-              >
-
-                <div>
-
-                  <strong>
-                    ${escapeHTML(
-                      student.name ||
-                      "Student"
-                    )}
-                  </strong>
-
-                  <div
-                    style="
-                      font-size:11px;
-                      color:#667085;
-                      margin-top:3px;
-                    "
-                  >
-                    ${escapeHTML(
-                      student.email ||
-                      ""
-                    )}
-                  </div>
-
-                </div>
-
-                <span class="
-                  status-badge
-                  status-completed
-                ">
-                  ${progress}%
-                </span>
-
-              </div>
-
-              <div
-                style="
-                  margin-top:10px;
-                  height:7px;
-                  background:#edf0f5;
-                  border-radius:10px;
-                  overflow:hidden;
-                "
-              >
-
-                <div
-                  style="
-                    width:${progress}%;
-                    height:100%;
-                    background:#4f46e5;
-                    border-radius:10px;
-                  "
-                ></div>
-
-              </div>
-
-              <div
-                style="
-                  margin-top:7px;
-                  font-size:10px;
-                  color:#667085;
-                "
-              >
-                ${completed}
-                completed /
-                ${total}
-                tasks
-              </div>
-
-            </div>
-
-          `;
-
-        }
-      )
-      .join("");
-
-}
-
-
-// ============================================================
-// SUPER ADMIN USERS / ADMINS
-// ============================================================
-
-function renderSuperAdminUsers(
-  container,
-  students
-) {
-
-  const admins =
-    [];
-
-  if (
-    state.profile?.role ===
-    "superadmin"
-  ) {
-
-    // Current admin profile
-    // is not necessarily inside state.users,
-    // so collect admin data from task/user records
-    // when available.
-
-    // We fetch all admin profiles here.
-    loadAllAdminsForSuperAdmin(
-      container,
-      students
-    );
-
-    return;
-
-  }
-
-  container.innerHTML = "";
-
-}
-
-
-// ============================================================
-// LOAD ALL ADMINS FOR SUPER ADMIN
-// ============================================================
-
-async function loadAllAdminsForSuperAdmin(
-  container,
-  students
-) {
-
-  try {
-
-    const snapshot =
-      await getDocs(
-        query(
-          collection(
-            db,
-            "users"
-          ),
-          where(
-            "role",
-            "==",
-            "admin"
-          )
-        )
-      );
-
-    const admins =
-      snapshot.docs.map(
-        item => ({
-          id:
-            item.id,
-          ...item.data()
-        })
-      );
-
-    let html = `
-
-      <div
-        style="
-          padding:14px;
-          border-radius:13px;
-          background:#fff;
-          border:1px solid #edf0f5;
-        "
-      >
-
-        <div
-          style="
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:10px;
-            margin-bottom:12px;
-          "
-        >
-
-          <strong>
-            Admin Accounts
-          </strong>
-
-          <strong
-            style="
-              color:#4f46e5;
-              font-size:12px;
-            "
-          >
-            ${admins.length}
-            admin${admins.length === 1 ? "" : "s"}
-          </strong>
-
-        </div>
-
-        <div
-          style="
-            display:grid;
-            gap:10px;
-          "
-        >
-
-    `;
-
-    if (!admins.length) {
-
-      html += `
-
-        <div
-          style="
-            padding:15px;
-            text-align:center;
-            color:#98a2b3;
-            font-size:11px;
-          "
-        >
-          No admin accounts found.
-        </div>
-
-      `;
-
-    } else {
-
-      html += admins
-        .map(
-          admin => {
-
-            const adminStudents =
-              students.filter(
-                student =>
-                  student.createdBy ===
-                  admin.uid
-              );
-
-            const adminTasks =
-              state.tasks.filter(
-                task =>
-                  task.assignedBy ===
-                  admin.uid
-              );
-
-            const completed =
-              adminTasks.filter(
-                task =>
-                  task.status ===
-                  "completed"
-              ).length;
-
-            const progress =
-              adminTasks.length
-                ? Math.round(
-                    completed /
-                    adminTasks.length *
-                    100
-                  )
-                : 0;
-
-            const taskRows =
-              adminTasks.length
-                ? adminTasks
-                    .slice(0, 8)
-                    .map(
-                      task => `
-
-                        <div
-                          style="
-                            padding:9px;
-                            border-radius:8px;
-                            background:#f8f9fc;
-                            font-size:10px;
-                          "
-                        >
-
-                          <strong>
-                            ${escapeHTML(
-                              task.title ||
-                              "Untitled"
-                            )}
-                          </strong>
-
-                          <div
-                            style="
-                              margin-top:3px;
-                              color:#667085;
-                            "
-                          >
-                            Student:
-                            ${escapeHTML(
-                              task.assignedToName ||
-                              getUserName(
-                                task.assignedTo
-                              )
-                            )}
-                          </div>
-
-                          <div
-                            style="
-                              margin-top:3px;
-                              color:#667085;
-                            "
-                          >
-                            Status:
-                            ${escapeHTML(
-                              statusLabel(
-                                task.status
-                              )
-                            )}
-                          </div>
-
-                        </div>
-
-                      `
-                    )
-                    .join("")
-                : `
-                    <div
-                      style="
-                        color:#98a2b3;
-                        font-size:10px;
-                      "
-                    >
-                      No tasks assigned yet.
-                    </div>
-                  `;
-
-            return `
-
-              <div
-                style="
-                  padding:14px;
-                  border-radius:13px;
-                  background:#f8f9fc;
-                  border:1px solid #edf0f5;
-                "
-              >
-
-                <div
-                  style="
-                    display:flex;
-                    justify-content:space-between;
-                    gap:10px;
-                    align-items:center;
-                  "
-                >
-
-                  <div>
-
-                    <strong
-                      style="
-                        display:block;
-                        font-size:13px;
-                        color:#344054;
-                      "
-                    >
-                      ${escapeHTML(
-                        admin.name ||
-                        "Admin"
-                      )}
-                    </strong>
-
-                    <span
-                      style="
-                        display:block;
-                        margin-top:3px;
-                        font-size:10px;
-                        color:#667085;
-                      "
-                    >
-                      ${escapeHTML(
-                        admin.email ||
-                        ""
-                      )}
-                    </span>
-
-                    <span
-                      style="
-                        display:block;
-                        margin-top:3px;
-                        font-size:10px;
-                        color:#98a2b3;
-                      "
-                    >
-                      Created:
-                      ${escapeHTML(
-                        formatDateTime(
-                          admin.createdAt
-                        )
-                      )}
-                    </span>
-
-                  </div>
-
-                  <span class="
-                    status-badge
-                    status-completed
-                  ">
-                    Admin
-                  </span>
-
-                </div>
-
-                <div
-                  style="
-                    display:grid;
-                    grid-template-columns:
-                      repeat(3,1fr);
-                    gap:7px;
-                    margin-top:12px;
-                  "
-                >
-
-                  <div
-                    style="
-                      text-align:center;
-                      padding:9px;
-                      background:#fff;
-                      border-radius:9px;
-                    "
-                  >
-
-                    <strong>
-                      ${adminStudents.length}
-                    </strong>
-
-                    <div
-                      style="
-                        font-size:9px;
-                        color:#667085;
-                      "
-                    >
-                      Users Created
-                    </div>
-
-                  </div>
-
-                  <div
-                    style="
-                      text-align:center;
-                      padding:9px;
-                      background:#fff;
-                      border-radius:9px;
-                    "
-                  >
-
-                    <strong>
-                      ${adminTasks.length}
-                    </strong>
-
-                    <div
-                      style="
-                        font-size:9px;
-                        color:#667085;
-                      "
-                    >
-                      Tasks
-                    </div>
-
-                  </div>
-
-                  <div
-                    style="
-                      text-align:center;
-                      padding:9px;
-                      background:#fff;
-                      border-radius:9px;
-                    "
-                  >
-
-                    <strong>
-                      ${completed}
-                    </strong>
-
-                    <div
-                      style="
-                        font-size:9px;
-                        color:#667085;
-                      "
-                    >
-                      Done
-                    </div>
-
-                  </div>
-
-                </div>
-
-                <div
-                  style="
-                    margin-top:10px;
-                    font-size:10px;
-                    color:#667085;
-                  "
-                >
-                  Progress:
-                  <strong>
-                    ${progress}%
-                  </strong>
-                </div>
-
-                <div
-                  style="
-                    margin-top:5px;
-                    height:6px;
-                    background:#e9edf5;
-                    border-radius:10px;
-                    overflow:hidden;
-                  "
-                >
-
-                  <div
-                    style="
-                      width:${progress}%;
-                      height:100%;
-                      background:#4f46e5;
-                    "
-                  ></div>
-
-                </div>
-
-                <div
-                  style="
-                    margin-top:12px;
-                    display:grid;
-                    gap:6px;
-                  "
-                >
-
-                  <strong
-                    style="
-                      font-size:11px;
-                      color:#344054;
-                    "
-                  >
-                    Assigned Tasks
-                  </strong>
-
-                  ${taskRows}
-
-                </div>
-
-              </div>
-
-            `;
-
-          }
-        )
-        .join("");
-
-    }
-
-    html += `
-
-        </div>
-
-      </div>
-
-    `;
-
-    container.innerHTML =
-      html;
-
-  } catch (error) {
-
-    console.error(
-      "Load admins error:",
-      error
-    );
-
-    container.innerHTML =
-      emptyHTML(
-        "⚠",
-        "Could not load admins",
-        firebaseError(error)
-      );
-
-  }
-
-}
-
-
-// ============================================================
-// PROGRESS
-// ============================================================
-
-function progressPercentage(
-  tasks
-) {
-
-  if (!tasks.length) {
-    return 0;
-  }
-
-  const completed =
-    tasks.filter(
-      task =>
-        task.status ===
-        "completed"
-    ).length;
-
-  return Math.round(
-    completed /
-    tasks.length *
-    100
-  );
-
-}
-
-
-// ============================================================
-// ALL STUDENTS PROGRESS
-// ============================================================
-
-function renderAllStudentsProgress() {
-
-  const container =
-    $("allStudentsProgress");
-
-  if (!container) {
-    return;
-  }
-
-  const students =
-    state.users.filter(
-      user =>
-        user.role ===
-        "student"
-    );
-
-  if (!students.length) {
-
-    container.innerHTML =
-      emptyHTML(
-        "📊",
-        "No student progress",
-        "Student progress will appear here."
-      );
-
-    return;
-
-  }
-
-  container.innerHTML =
-    students
-      .map(
-        student => {
-
-          const tasks =
-            state.tasks.filter(
-              task =>
-                task.assignedTo ===
-                student.uid
-            );
-
-          const completed =
-            tasks.filter(
-              task =>
-                task.status ===
-                "completed"
-            ).length;
-
-          const percentage =
-            progressPercentage(
-              tasks
-            );
-
-          return `
-
-            <div
-              class="progress-card"
-              data-user-progress="${escapeHTML(
-                student.uid
-              )}"
-              style="cursor:pointer;"
-            >
-
-              <div
-                style="
-                  display:flex;
-                  justify-content:space-between;
-                  gap:10px;
-                "
-              >
-
-                <div>
-
-                  <strong>
-                    ${escapeHTML(
-                      student.name ||
-                      "Student"
-                    )}
-                  </strong>
-
-                  <div
-                    style="
-                      font-size:10px;
-                      color:#667085;
-                      margin-top:3px;
-                    "
-                  >
-                    ${escapeHTML(
-                      student.email ||
-                      ""
-                    )}
-                  </div>
-
-                </div>
-
-                <strong
-                  style="
-                    color:#4f46e5;
-                  "
-                >
-                  ${percentage}%
-                </strong>
-
-              </div>
-
-              <div
-                style="
-                  height:8px;
-                  background:#edf0f5;
-                  border-radius:10px;
-                  margin-top:10px;
-                  overflow:hidden;
-                "
-              >
-
-                <div
-                  style="
-                    width:${percentage}%;
-                    height:100%;
-                    background:#4f46e5;
-                  "
-                ></div>
-
-              </div>
-
-              <div
-                style="
-                  margin-top:6px;
-                  font-size:10px;
-                  color:#667085;
-                "
-              >
-                ${completed}
-                completed of
-                ${tasks.length}
-                tasks
-              </div>
-
-            </div>
-
-          `;
-
-        }
-      )
-      .join("");
-
-}
-
-
-// ============================================================
-// INDIVIDUAL STUDENT PROGRESS
-// ============================================================
-
-function renderIndividualProgress() {
-
-  const container =
-    $("individualProgress");
-
-  if (!container) {
-    return;
-  }
-
-  const student =
-    state.users.find(
-      user =>
-        (user.uid || user.id) ===
-        state.selectedStudentId
-    );
-
-  if (!student) {
-
-    container.innerHTML =
-      "";
-
-    return;
-
-  }
-
-  const tasks =
-    state.tasks.filter(
-      task =>
-        task.assignedTo ===
-        student.uid
-    );
-
-  const completed =
-    tasks.filter(
-      task =>
-        task.status ===
-        "completed"
-    ).length;
-
-  const pending =
-    tasks.filter(
-      task =>
-        task.status ===
-        "pending"
-    ).length;
-
-  const active =
-    tasks.filter(
-      task =>
-        task.status ===
-          "accepted" ||
-        task.status ===
-          "in_progress"
-    ).length;
-
-  const percentage =
-    progressPercentage(
-      tasks
-    );
-
-  container.innerHTML = `
-
-    <div
-      style="
-        padding:15px;
-        border-radius:14px;
-        background:#fff;
-        border:1px solid #edf0f5;
-      "
-    >
-
-      <div
-        style="
-          display:flex;
-          justify-content:space-between;
-          gap:10px;
-          align-items:center;
-        "
-      >
-
-        <div>
-
-          <strong>
-            ${escapeHTML(
-              student.name ||
-              "Student"
-            )}
-          </strong>
-
-          <div
-            style="
-              font-size:10px;
-              color:#667085;
-              margin-top:3px;
-            "
-          >
-            ${escapeHTML(
-              student.email ||
-              ""
-            )}
-          </div>
-
-        </div>
-
-        <button
-          class="btn btn-secondary"
-          data-close-student-progress
-        >
-          Close
-        </button>
-
-      </div>
-
-      <div
-        style="
-          margin-top:15px;
-          text-align:center;
-        "
-      >
-
-        <strong
-          style="
-            font-size:28px;
-            color:#4f46e5;
-          "
-        >
-          ${percentage}%
-        </strong>
-
-        <div
-          style="
-            font-size:11px;
-            color:#667085;
-          "
-        >
-          Overall Progress
-        </div>
-
-      </div>
-
-      <div
-        style="
-          height:9px;
-          background:#edf0f5;
-          border-radius:10px;
-          overflow:hidden;
-          margin-top:10px;
-        "
-      >
-
-        <div
-          style="
-            width:${percentage}%;
-            height:100%;
-            background:#4f46e5;
-          "
-        ></div>
-
-      </div>
-
-      <div
-        style="
-          display:grid;
-          grid-template-columns:
-            repeat(3,1fr);
-          gap:7px;
-          margin-top:13px;
-        "
-      >
-
-        <div
-          style="
-            text-align:center;
-            padding:9px;
-            background:#f8f9fc;
-            border-radius:9px;
-          "
-        >
-
-          <strong>
-            ${completed}
-          </strong>
-
-          <div
-            style="
-              font-size:9px;
-              color:#667085;
-            "
-          >
-            Completed
-          </div>
-
-        </div>
-
-        <div
-          style="
-            text-align:center;
-            padding:9px;
-            background:#f8f9fc;
-            border-radius:9px;
-          "
-        >
-
-          <strong>
-            ${active}
-          </strong>
-
-          <div
-            style="
-              font-size:9px;
-              color:#667085;
-            "
-          >
-            Active
-          </div>
-
-        </div>
-
-        <div
-          style="
-            text-align:center;
-            padding:9px;
-            background:#f8f9fc;
-            border-radius:9px;
-          "
-        >
-
-          <strong>
-            ${pending}
-          </strong>
-
-          <div
-            style="
-              font-size:9px;
-              color:#667085;
-            "
-          >
-            Pending
-          </div>
-
-        </div>
-
-      </div>
-
-      <div
-        style="
-          margin-top:15px;
-          display:grid;
-          gap:7px;
-        "
-      >
-
-        ${
-          tasks.length
-            ? tasks
-                .map(
-                  task => `
-
-                    <div
-                      style="
-                        padding:10px;
-                        border-radius:9px;
-                        background:#f8f9fc;
-                      "
-                    >
-
-                      <strong
-                        style="
-                          font-size:11px;
-                        "
-                      >
-                        ${escapeHTML(
-                          task.title ||
-                          "Untitled Task"
-                        )}
-                      </strong>
-
-                      <div
-                        style="
-                          margin-top:4px;
-                          font-size:9px;
-                          color:#667085;
-                        "
-                      >
-                        Assigned by:
-                        ${escapeHTML(
-                          getAssignerName(
-                            task
-                          )
-                        )}
-                      </div>
-
-                      <div
-                        style="
-                          margin-top:3px;
-                          font-size:9px;
-                          color:#667085;
-                        "
-                      >
-                        Status:
-                        ${escapeHTML(
-                          statusLabel(
-                            task.status
-                          )
-                        )}
-                      </div>
-
-                      <div
-                        style="
-                          margin-top:3px;
-                          font-size:9px;
-                          color:#667085;
-                        "
-                      >
-                        Assigned:
-                        ${escapeHTML(
-                          formatDate(
-                            task.assignedAt
-                          )
-                        )}
-                      </div>
-
-                    </div>
-
-                  `
-                )
-                .join("")
-            : `
-                <div
-                  style="
-                    text-align:center;
-                    padding:15px;
-                    color:#98a2b3;
-                    font-size:11px;
-                  "
-                >
-                  No tasks assigned.
-                </div>
-              `
-        }
-
-      </div>
-
-    </div>
-
-  `;
-
-}
-
-
-// ============================================================
-// PROGRESS PAGE
-// ============================================================
-
-function renderProgress() {
-
-  const allContainer =
-    $("allStudentsProgress");
-
-  const individualContainer =
-    $("individualProgress");
-
-  if (
-    allContainer
-  ) {
-
-    renderAllStudentsProgress();
-
-  }
-
-  if (
-    individualContainer
-  ) {
-
-    renderIndividualProgress();
-
-  }
-
-}
-
-
-// ============================================================
-// USER MODAL
-// ============================================================
-
-function openUserModal() {
+  if (!container) return;
 
   if (
     state.profile?.role !== "admin" &&
     state.profile?.role !== "superadmin"
   ) {
-
-    toast(
-      "Only admins can create users.",
-      "error"
-    );
-
-    return;
-  }
-
-  show(
-    "userModal"
-  );
-
-  message(
-    "userMessage",
-    ""
-  );
-
-  $("userForm")
-    ?.reset();
-
-}
-
-
-function closeUserModal() {
-
-  hide(
-    "userModal"
-  );
-
-}
-
-
-// ============================================================
-// TASK MODAL
-// ============================================================
-
-function openTaskModal() {
-
-  if (
-    state.profile?.role !== "admin" &&
-    state.profile?.role !== "superadmin"
-  ) {
-
-    toast(
-      "Only admins can assign tasks.",
-      "error"
-    );
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>User management is available to administrators.</p>
+      </div>
+    `;
 
     return;
   }
 
-  show(
-    "taskModal"
-  );
+  if (!state.users.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>No students found.</p>
+      </div>
+    `;
 
-  message(
-    "taskMessage",
-    ""
-  );
-
-  $("taskForm")
-    ?.reset();
-
-  populateTaskUsers();
-
-}
-
-
-function closeTaskModal() {
-
-  hide(
-    "taskModal"
-  );
-
-}
-
-
-// ============================================================
-// TASK USERS
-// ============================================================
-
-function populateTaskUsers() {
-
-  const select =
-    $("taskUser");
-
-  if (!select) {
     return;
   }
 
-  select.innerHTML = `
+  container.innerHTML = state.users.map(user => {
 
-    <option value="">
-      Select a user
-    </option>
-
-  `;
-
-  const students =
-    state.users.filter(
-      user =>
-        user.role ===
-        "student"
-    );
-
-  students.forEach(
-    user => {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-      option.value =
-        user.uid ||
-        user.id;
-
-      option.textContent =
-        `${user.name || "User"} — ${
-          user.email || ""
-        }`;
-
-      select.appendChild(
-        option
+    const userTasks =
+      state.tasks.filter(
+        task => task.assignedTo === user.uid
       );
 
-    }
-  );
+    const completed =
+      userTasks.filter(
+        task => task.status === "completed"
+      ).length;
 
+    const total = userTasks.length;
+
+    const percentage =
+      total > 0
+        ? Math.round((completed / total) * 100)
+        : 0;
+
+    return `
+      <div class="user-card" data-student-id="${escapeHTML(user.uid || user.id)}">
+
+        <div class="user-card-main">
+
+          <div class="user-avatar">
+            ${escapeHTML(
+              (user.name || "S").charAt(0).toUpperCase()
+            )}
+          </div>
+
+          <div class="user-info">
+            <h3>${escapeHTML(user.name || "Student")}</h3>
+
+            <p>${escapeHTML(user.email || "")}</p>
+
+            <span class="user-role">
+              Student
+            </span>
+          </div>
+
+        </div>
+
+        <div class="user-progress">
+
+          <div class="progress-top">
+            <span>Progress</span>
+            <strong>${percentage}%</strong>
+          </div>
+
+          <div class="progress-bar">
+            <div
+              class="progress-fill"
+              style="width:${percentage}%"
+            ></div>
+          </div>
+
+          <small>
+            ${completed} of ${total} tasks completed
+          </small>
+
+        </div>
+
+        <div class="user-meta">
+          <small>
+            Created by:
+            ${escapeHTML(user.createdByName || "—")}
+          </small>
+        </div>
+
+      </div>
+    `;
+  }).join("");
+
+  container
+    .querySelectorAll("[data-student-id]")
+    .forEach(card => {
+
+      card.addEventListener("click", () => {
+
+        const studentId =
+          card.dataset.studentId;
+
+        state.selectedStudentId =
+          studentId;
+
+        showPage("progress");
+      });
+    });
 }
 
 
 // ============================================================
-// CREATE USER
+// CREATE STUDENT
 // ============================================================
 
-async function createUser(
-  event
-) {
-
+async function createUser(event) {
   event.preventDefault();
 
-  const role =
-    state.profile?.role;
-
   if (
-    role !== "admin" &&
-    role !== "superadmin"
+    state.profile?.role !== "admin" &&
+    state.profile?.role !== "superadmin"
   ) {
-
-    message(
+    setMessage(
       "userMessage",
-      "Only admins can create users."
+      "You do not have permission.",
+      "error"
     );
 
     return;
   }
 
   const name =
-    $("userName")
-      ?.value
-      .trim();
+    $("userName")?.value.trim();
 
   const email =
-    $("userEmail")
-      ?.value
-      .trim()
-      .toLowerCase();
+    $("userEmail")?.value.trim();
 
   const password =
-    $("userPassword")
-      ?.value;
+    $("userPassword")?.value;
 
-  message(
+  if (!name || !email || !password) {
+    setMessage(
+      "userMessage",
+      "Please fill in all fields.",
+      "error"
+    );
+
+    return;
+  }
+
+  if (password.length < 6) {
+    setMessage(
+      "userMessage",
+      "Temporary password must be at least 6 characters.",
+      "error"
+    );
+
+    return;
+  }
+
+  setMessage(
     "userMessage",
-    ""
+    "Creating student account..."
   );
 
-  if (!name) {
-
-    message(
-      "userMessage",
-      "Please enter the student's name."
-    );
-
-    return;
-  }
-
-  if (!email) {
-
-    message(
-      "userMessage",
-      "Please enter the student's email."
-    );
-
-    return;
-  }
-
-  if (
-    !password ||
-    password.length < 6
-  ) {
-
-    message(
-      "userMessage",
-      "Password must contain at least 6 characters."
-    );
-
-    return;
-  }
-
-  // ----------------------------------------------------------
-  // IMPORTANT:
-  // Same email means same student account.
-  // Do not create duplicate student accounts.
-  // ----------------------------------------------------------
-
-  const existingStudent =
-    state.users.find(
-      user =>
-        user.role === "student" &&
-        String(
-          user.email || ""
-        ).toLowerCase() ===
-        email
-    );
-
-  if (existingStudent) {
-
-    message(
-      "userMessage",
-      "This email already belongs to an existing student. Use that student when assigning tasks."
-    );
-
-    return;
-  }
-
-  if (!secondaryAuth) {
-
-    message(
-      "userMessage",
-      "Secure user creation is not available. Please refresh the page."
-    );
-
-    return;
-  }
-
-  const button =
-    event.submitter;
-
-  if (button) {
-
-    button.disabled =
-      true;
-
-    button.textContent =
-      "Creating User...";
-
-  }
+  let secondaryApp = null;
+  let secondaryAuth = null;
 
   try {
 
+    // --------------------------------------------------------
+    // CHECK EXISTING STUDENT
+    // --------------------------------------------------------
+
+    const existingQuery = query(
+      collection(db, "users"),
+      where("email", "==", email)
+    );
+
+    const existingSnapshot =
+      await getDocs(existingQuery);
+
+    if (!existingSnapshot.empty) {
+
+      setMessage(
+        "userMessage",
+        "A user with this email already exists.",
+        "error"
+      );
+
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // SECONDARY FIREBASE APP
+    // --------------------------------------------------------
+
+    const firebaseConfig =
+      app.options;
+
+    secondaryApp =
+      initializeSecondaryApp(
+        firebaseConfig,
+        `SecondaryApp-${Date.now()}`
+      );
+
+    secondaryAuth =
+      getSecondaryAuth(
+        secondaryApp
+      );
+
+
+    // --------------------------------------------------------
+    // CREATE AUTH USER
+    // --------------------------------------------------------
+
     const credential =
-      await createUserWithEmailAndPassword(
+      await createSecondaryUser(
         secondaryAuth,
         email,
         password
@@ -3491,34 +1001,31 @@ async function createUser(
     const student =
       credential.user;
 
-    await updateProfile(
+
+    // --------------------------------------------------------
+    // UPDATE DISPLAY NAME
+    // --------------------------------------------------------
+
+    await updateSecondaryProfile(
       student,
       {
-        displayName:
-          name
+        displayName: name
       }
     );
 
+
+    // --------------------------------------------------------
+    // CREATE FIRESTORE PROFILE
+    // --------------------------------------------------------
+
     await setDoc(
-      doc(
-        db,
-        "users",
-        student.uid
-      ),
+      doc(db, "users", student.uid),
       {
-
-        uid:
-          student.uid,
-
+        uid: student.uid,
         name,
-
         email,
-
-        role:
-          "student",
-
-        active:
-          true,
+        role: "student",
+        active: true,
 
         createdBy:
           state.user.uid,
@@ -3530,70 +1037,220 @@ async function createUser(
 
         createdAt:
           serverTimestamp()
-
       }
     );
 
-    await signOut(
-      secondaryAuth
+
+    // --------------------------------------------------------
+    // CLEAN SECONDARY AUTH
+    // --------------------------------------------------------
+
+    try {
+      await signOutSecondary(
+        secondaryAuth
+      );
+    } catch {}
+
+
+    await deleteApp(
+      secondaryApp
     );
 
-    message(
-      "userMessage",
-      "Student created successfully.",
-      "success"
-    );
+    secondaryApp = null;
 
-    toast(
-      "Student account created successfully."
-    );
 
-    $("userForm")
-      ?.reset();
+    // --------------------------------------------------------
+    // REFRESH
+    // --------------------------------------------------------
 
     await loadUsers();
 
-    await loadTasks();
+    closeModal("userModal");
 
-    renderUsers();
+    if ($("userForm")) {
+      $("userForm").reset();
+    }
 
-    renderProgress();
+    setMessage(
+      "userMessage",
+      ""
+    );
 
-    populateTaskUsers();
-
-    setTimeout(
-      () => {
-        closeUserModal();
-      },
-      900
+    showToast(
+      "Student account created successfully."
     );
 
   } catch (error) {
 
     console.error(
-      "Create user error:",
+      "createUser:",
       error
     );
 
-    message(
-      "userMessage",
-      firebaseError(error)
-    );
-
-  } finally {
-
-    if (button) {
-
-      button.disabled =
-        false;
-
-      button.textContent =
-        "Create User";
-
+    if (secondaryApp) {
+      try {
+        await deleteApp(
+          secondaryApp
+        );
+      } catch {}
     }
 
+    setMessage(
+      "userMessage",
+      firebaseError(error),
+      "error"
+    );
   }
+}
 
+
+// ============================================================
+// LOAD TASKS
+// ============================================================
+
+async function loadTasks() {
+  if (!state.profile) return;
+
+  try {
+
+    if (
+      state.profile.role === "admin" ||
+      state.profile.role === "superadmin"
+    ) {
+
+      try {
+
+        const tasksQuery = query(
+          collection(db, "tasks"),
+          orderBy("assignedAt", "desc")
+        );
+
+        const snapshot =
+          await getDocs(tasksQuery);
+
+        state.tasks =
+          snapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          }));
+
+      } catch (indexError) {
+
+        console.warn(
+          "Ordered task query failed. Loading without order.",
+          indexError
+        );
+
+        const snapshot =
+          await getDocs(
+            collection(db, "tasks")
+          );
+
+        state.tasks =
+          snapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          }));
+
+        state.tasks.sort(
+          (a, b) =>
+            getTaskDate(b)?.toMillis?.() -
+              getTaskDate(a)?.toMillis?.() || 0
+        );
+      }
+
+    } else {
+
+      const tasksQuery = query(
+        collection(db, "tasks"),
+        where(
+          "assignedTo",
+          "==",
+          state.user.uid
+        )
+      );
+
+      const snapshot =
+        await getDocs(tasksQuery);
+
+      state.tasks =
+        snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
+
+      state.tasks.sort(
+        (a, b) => {
+
+          const aDate =
+            getTaskDate(a)?.toMillis?.() || 0;
+
+          const bDate =
+            getTaskDate(b)?.toMillis?.() || 0;
+
+          return bDate - aDate;
+        }
+      );
+    }
+
+    updateDashboard();
+    renderTasks();
+    renderRecentTasks();
+    renderProgress();
+    renderUsers();
+
+  } catch (error) {
+
+    console.error(
+      "loadTasks:",
+      error
+    );
+
+    showToast(
+      firebaseError(error),
+      "error"
+    );
+  }
+}
+
+
+// ============================================================
+// TASK USER DROPDOWN
+// ============================================================
+
+function populateTaskUsers() {
+  const select = $("taskUser");
+
+  if (!select) return;
+
+  const currentValue =
+    select.value;
+
+  select.innerHTML = `
+    <option value="">
+      Select student
+    </option>
+  `;
+
+  state.users.forEach(user => {
+
+    const option =
+      document.createElement("option");
+
+    option.value =
+      user.uid || user.id;
+
+    option.textContent =
+      user.name ||
+      user.email ||
+      "Student";
+
+    select.appendChild(option);
+  });
+
+  if (currentValue) {
+    select.value = currentValue;
+  }
 }
 
 
@@ -3601,130 +1258,93 @@ async function createUser(
 // CREATE TASK
 // ============================================================
 
-async function createTask(
-  event
-) {
-
+async function createTask(event) {
   event.preventDefault();
 
   if (
     state.profile?.role !== "admin" &&
     state.profile?.role !== "superadmin"
   ) {
+    setMessage(
+      "taskMessage",
+      "You do not have permission.",
+      "error"
+    );
+
     return;
   }
 
   const title =
-    $("taskTitle")
-      ?.value
-      .trim();
+    $("taskTitle")?.value.trim();
 
   const description =
-    $("taskDescription")
-      ?.value
-      .trim();
+    $("taskDescription")?.value.trim();
 
   const assignedTo =
-    $("taskUser")
-      ?.value;
+    $("taskUser")?.value;
 
   const dueDate =
-    $("taskDueDate")
-      ?.value ||
-    null;
+    $("taskDueDate")?.value || null;
 
-  message(
+  if (!title || !assignedTo) {
+    setMessage(
+      "taskMessage",
+      "Please enter a title and select a student.",
+      "error"
+    );
+
+    return;
+  }
+
+  const student =
+    state.users.find(
+      user =>
+        (user.uid || user.id) ===
+        assignedTo
+    );
+
+  if (!student) {
+    setMessage(
+      "taskMessage",
+      "Selected student was not found.",
+      "error"
+    );
+
+    return;
+  }
+
+  setMessage(
     "taskMessage",
-    ""
+    "Creating task..."
   );
-
-  if (!title) {
-
-    message(
-      "taskMessage",
-      "Please enter a task title."
-    );
-
-    return;
-  }
-
-  if (!description) {
-
-    message(
-      "taskMessage",
-      "Please enter a task description."
-    );
-
-    return;
-  }
-
-  if (!assignedTo) {
-
-    message(
-      "taskMessage",
-      "Please select a user."
-    );
-
-    return;
-  }
-
-  const button =
-    event.submitter;
-
-  if (button) {
-
-    button.disabled =
-      true;
-
-    button.textContent =
-      "Assigning...";
-
-  }
 
   try {
 
-    const assignedStudent =
-      state.users.find(
-        user =>
-          (
-            user.uid ||
-            user.id
-          ) ===
-          assignedTo
-      );
-
-    if (!assignedStudent) {
-
-      throw new Error(
-        "Selected student was not found."
-      );
-
-    }
+    const adminName =
+      state.profile?.name ||
+      state.user?.displayName ||
+      "Admin";
 
     await addDoc(
-      collection(
-        db,
-        "tasks"
-      ),
+      collection(db, "tasks"),
       {
-
         title,
 
-        description,
+        description:
+          description || "",
 
         assignedTo,
 
         assignedToName:
-          assignedStudent.name ||
+          student.name ||
+          student.email ||
           "Student",
 
         assignedBy:
           state.user.uid,
 
         assignedByName:
-          state.profile?.name ||
-          state.user.displayName ||
-          "Admin",
+          adminName,
 
         status:
           "pending",
@@ -3745,580 +1365,1751 @@ async function createTask(
 
         durationMs:
           0
-
       }
     );
 
-    toast(
-      "Task assigned successfully."
-    );
+    closeModal("taskModal");
 
-    closeTaskModal();
+    if ($("taskForm")) {
+      $("taskForm").reset();
+    }
+
+    setMessage(
+      "taskMessage",
+      ""
+    );
 
     await loadTasks();
 
-    updateDashboard();
-
-    renderTasks();
-
-    renderProgress();
-
-    renderUsers();
+    showToast(
+      "Task assigned successfully."
+    );
 
   } catch (error) {
 
     console.error(
-      "Create task error:",
+      "createTask:",
       error
     );
 
-    message(
+    setMessage(
       "taskMessage",
-      firebaseError(error)
+      firebaseError(error),
+      "error"
+    );
+  }
+}
+
+
+// ============================================================
+// TASK CARD HTML
+// ============================================================
+
+function taskCardHTML(task, options = {}) {
+
+  const role =
+    state.profile?.role;
+
+  const isStudent =
+    role === "student";
+
+  const canManage =
+    role === "admin" ||
+    role === "superadmin";
+
+  const status =
+    task.status || "pending";
+
+  const assignedBy =
+    task.assignedByName ||
+    "Admin";
+
+  const studentName =
+    task.assignedToName ||
+    "Student";
+
+  const due =
+    task.dueDate
+      ? formatDate(task.dueDate)
+      : "No due date";
+
+  const buttons = [];
+
+  if (isStudent) {
+
+    if (status === "pending") {
+      buttons.push(`
+        <button
+          class="task-action-btn"
+          data-task-action="accept"
+          data-task-id="${escapeHTML(task.id)}"
+        >
+          Accept
+        </button>
+      `);
+    }
+
+    if (status === "accepted") {
+      buttons.push(`
+        <button
+          class="task-action-btn"
+          data-task-action="start"
+          data-task-id="${escapeHTML(task.id)}"
+        >
+          Start Task
+        </button>
+      `);
+    }
+
+    if (status === "in_progress") {
+      buttons.push(`
+        <button
+          class="task-action-btn"
+          data-task-action="complete"
+          data-task-id="${escapeHTML(task.id)}"
+        >
+          Complete
+        </button>
+      `);
+    }
+  }
+
+  if (canManage) {
+
+    buttons.push(`
+      <button
+        class="task-action-btn danger"
+        data-task-action="delete"
+        data-task-id="${escapeHTML(task.id)}"
+      >
+        Delete
+      </button>
+    `);
+  }
+
+  return `
+    <div
+      class="task-card"
+      data-task-id="${escapeHTML(task.id)}"
+    >
+
+      <div class="task-card-header">
+
+        <div>
+          <h3>
+            ${escapeHTML(task.title || "Untitled Task")}
+          </h3>
+
+          <span class="task-status ${getStatusClass(status)}">
+            ${getStatusText(status)}
+          </span>
+        </div>
+
+      </div>
+
+      ${
+        task.description
+          ? `
+            <p class="task-description">
+              ${escapeHTML(task.description)}
+            </p>
+          `
+          : ""
+      }
+
+      <div class="task-details">
+
+        ${
+          isStudent
+            ? `
+              <div>
+                <small>Assigned by</small>
+                <strong>
+                  ${escapeHTML(assignedBy)}
+                </strong>
+              </div>
+            `
+            : `
+              <div>
+                <small>Student</small>
+                <strong>
+                  ${escapeHTML(studentName)}
+                </strong>
+              </div>
+
+              <div>
+                <small>Assigned by</small>
+                <strong>
+                  ${escapeHTML(assignedBy)}
+                </strong>
+              </div>
+            `
+        }
+
+        <div>
+          <small>Due date</small>
+          <strong>${escapeHTML(due)}</strong>
+        </div>
+
+        <div>
+          <small>Assigned</small>
+          <strong>
+            ${escapeHTML(
+              formatDateTime(
+                getTaskDate(task)
+              )
+            )}
+          </strong>
+        </div>
+
+      </div>
+
+      ${
+        buttons.length
+          ? `
+            <div class="task-actions">
+              ${buttons.join("")}
+            </div>
+          `
+          : ""
+      }
+
+    </div>
+  `;
+}
+
+
+// ============================================================
+// RENDER TASKS
+// ============================================================
+
+function renderTasks() {
+
+  const container =
+    $("allTasksContainer") ||
+    $("tasksList");
+
+  if (!container) return;
+
+  let tasks =
+    [...state.tasks];
+
+  const search =
+    $("taskSearch")?.value
+      .trim()
+      .toLowerCase() || "";
+
+  const filter =
+    $("taskStatusFilter")?.value || "all";
+
+  if (search) {
+    tasks = tasks.filter(task => {
+
+      const text = [
+        task.title,
+        task.description,
+        task.assignedToName,
+        task.assignedByName
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return text.includes(search);
+    });
+  }
+
+  if (filter !== "all") {
+    tasks = tasks.filter(
+      task =>
+        (task.status || "pending") === filter
+    );
+  }
+
+  if (!tasks.length) {
+
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>No tasks found.</p>
+      </div>
+    `;
+
+    return;
+  }
+
+  container.innerHTML =
+    tasks.map(task =>
+      taskCardHTML(task)
+    ).join("");
+
+  attachTaskActions(container);
+}
+
+
+// ============================================================
+// RECENT TASKS
+// ============================================================
+
+function renderRecentTasks() {
+
+  const container =
+    $("recentTasksContainer") ||
+    $("recentTasks");
+
+  if (!container) return;
+
+  const recent =
+    [...state.tasks]
+      .sort((a, b) => {
+
+        const aTime =
+          getTaskDate(a)?.toMillis?.() || 0;
+
+        const bTime =
+          getTaskDate(b)?.toMillis?.() || 0;
+
+        return bTime - aTime;
+      })
+      .slice(0, 5);
+
+  if (!recent.length) {
+
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>No recent tasks.</p>
+      </div>
+    `;
+
+    return;
+  }
+
+  container.innerHTML =
+    recent.map(task =>
+      taskCardHTML(
+        task,
+        { recent: true }
+      )
+    ).join("");
+
+  attachTaskActions(container);
+}
+
+
+// ============================================================
+// TASK ACTIONS
+// ============================================================
+
+function attachTaskActions(container) {
+
+  container
+    .querySelectorAll("[data-task-action]")
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        async event => {
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          const action =
+            button.dataset.taskAction;
+
+          const taskId =
+            button.dataset.taskId;
+
+          if (!taskId) return;
+
+          await handleTaskAction(
+            action,
+            taskId
+          );
+        }
+      );
+    });
+}
+
+
+async function handleTaskAction(
+  action,
+  taskId
+) {
+
+  const task =
+    state.tasks.find(
+      item => item.id === taskId
+    );
+
+  if (!task) {
+    showToast(
+      "Task not found.",
+      "error"
+    );
+
+    return;
+  }
+
+  const now =
+    serverTimestamp();
+
+  const updates = {};
+
+
+  // ----------------------------------------------------------
+  // STUDENT ACCEPT
+  // ----------------------------------------------------------
+
+  if (
+    action === "accept" &&
+    state.profile?.role === "student"
+  ) {
+
+    if (task.assignedTo !== state.user.uid) {
+      showToast(
+        "This task is not assigned to you.",
+        "error"
+      );
+
+      return;
+    }
+
+    updates.status = "accepted";
+    updates.acceptedAt = now;
+  }
+
+
+  // ----------------------------------------------------------
+  // STUDENT START
+  // ----------------------------------------------------------
+
+  else if (
+    action === "start" &&
+    state.profile?.role === "student"
+  ) {
+
+    if (task.assignedTo !== state.user.uid) {
+      showToast(
+        "This task is not assigned to you.",
+        "error"
+      );
+
+      return;
+    }
+
+    updates.status = "in_progress";
+    updates.startedAt = now;
+  }
+
+
+  // ----------------------------------------------------------
+  // STUDENT COMPLETE
+  // ----------------------------------------------------------
+
+  else if (
+    action === "complete" &&
+    state.profile?.role === "student"
+  ) {
+
+    if (task.assignedTo !== state.user.uid) {
+      showToast(
+        "This task is not assigned to you.",
+        "error"
+      );
+
+      return;
+    }
+
+    updates.status = "completed";
+    updates.completedAt = now;
+
+    const started =
+      task.startedAt?.toMillis?.() || 0;
+
+    if (started) {
+      updates.durationMs =
+        Math.max(
+          0,
+          Date.now() - started
+        );
+    }
+  }
+
+
+  // ----------------------------------------------------------
+  // DELETE
+  // ----------------------------------------------------------
+
+  else if (
+    action === "delete" &&
+    (
+      state.profile?.role === "admin" ||
+      state.profile?.role === "superadmin"
+    )
+  ) {
+
+    if (
+      state.profile.role === "admin" &&
+      task.assignedBy !== state.user.uid
+    ) {
+      showToast(
+        "You can only delete tasks assigned by you.",
+        "error"
+      );
+
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        "Delete this task?"
+      );
+
+    if (!confirmed) return;
+
+    try {
+
+      await deleteDoc(
+        doc(db, "tasks", taskId)
+      );
+
+      state.tasks =
+        state.tasks.filter(
+          item => item.id !== taskId
+        );
+
+      renderTasks();
+      renderRecentTasks();
+      updateDashboard();
+      renderProgress();
+
+      showToast(
+        "Task deleted."
+      );
+
+    } catch (error) {
+
+      showToast(
+        firebaseError(error),
+        "error"
+      );
+    }
+
+    return;
+  }
+
+
+  // ----------------------------------------------------------
+  // INVALID ACTION
+  // ----------------------------------------------------------
+
+  else {
+
+    showToast(
+      "You cannot perform this action.",
+      "error"
+    );
+
+    return;
+  }
+
+
+  // ----------------------------------------------------------
+  // UPDATE TASK
+  // ----------------------------------------------------------
+
+  try {
+
+    await updateDoc(
+      doc(db, "tasks", taskId),
+      updates
+    );
+
+    await loadTasks();
+
+    showToast(
+      action === "accept"
+        ? "Task accepted."
+        : action === "start"
+          ? "Task started."
+          : action === "complete"
+            ? "Task completed."
+            : "Task updated."
+    );
+
+  } catch (error) {
+
+    console.error(
+      "handleTaskAction:",
+      error
+    );
+
+    showToast(
+      firebaseError(error),
+      "error"
+    );
+  }
+}
+
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+
+function updateDashboard() {
+
+  const tasks =
+    state.tasks || [];
+
+  const total =
+    tasks.length;
+
+  const completed =
+    tasks.filter(
+      task =>
+        task.status === "completed"
+    ).length;
+
+  const pending =
+    tasks.filter(
+      task =>
+        !task.status ||
+        task.status === "pending"
+    ).length;
+
+  const inProgress =
+    tasks.filter(
+      task =>
+        task.status === "in_progress" ||
+        task.status === "accepted"
+    ).length;
+
+  const percentage =
+    total > 0
+      ? Math.round(
+          (completed / total) * 100
+        )
+      : 0;
+
+
+  // New HTML IDs
+
+  const values = {
+    statTotalTasks: total,
+    statPending: pending,
+    statInProgress: inProgress,
+    statCompleted: completed,
+
+    totalTasks: total,
+    pendingTasks: pending,
+    activeTasks: inProgress,
+    completedTasks: completed
+  };
+
+  Object.entries(values)
+    .forEach(([id, value]) => {
+
+      const el = $(id);
+
+      if (el) {
+        el.textContent = value;
+      }
+    });
+
+
+  // Greeting
+
+  const greeting =
+    $("dashboardGreeting");
+
+  if (greeting) {
+
+    const name =
+      state.profile?.name ||
+      state.user?.displayName ||
+      "User";
+
+    greeting.textContent =
+      `Welcome back, ${name}!`;
+  }
+
+
+  // Overview percentage
+
+  const overviewPercentage =
+    $("overviewPercentage");
+
+  if (overviewPercentage) {
+    overviewPercentage.textContent =
+      `${percentage}%`;
+  }
+
+
+  // Overview progress bar
+
+  const overviewProgress =
+    $("overviewProgress");
+
+  if (overviewProgress) {
+
+    if (
+      overviewProgress.style &&
+      overviewProgress.style.setProperty
+    ) {
+      overviewProgress.style.setProperty(
+        "width",
+        `${percentage}%`
+      );
+    }
+  }
+
+
+  // Total users
+
+  const totalUsers =
+    $("totalUsers");
+
+  if (totalUsers) {
+    totalUsers.textContent =
+      state.users.length;
+  }
+}
+
+
+// ============================================================
+// PROGRESS
+// ============================================================
+
+function calculateStudentProgress(studentId) {
+
+  const tasks =
+    state.tasks.filter(
+      task =>
+        task.assignedTo === studentId
+    );
+
+  const total =
+    tasks.length;
+
+  const completed =
+    tasks.filter(
+      task =>
+        task.status === "completed"
+    ).length;
+
+  const inProgress =
+    tasks.filter(
+      task =>
+        task.status === "in_progress" ||
+        task.status === "accepted"
+    ).length;
+
+  const pending =
+    tasks.filter(
+      task =>
+        !task.status ||
+        task.status === "pending"
+    ).length;
+
+  const percentage =
+    total > 0
+      ? Math.round(
+          (completed / total) * 100
+        )
+      : 0;
+
+  return {
+    total,
+    completed,
+    inProgress,
+    pending,
+    percentage
+  };
+}
+
+
+function renderProgress() {
+
+  const container =
+    $("progressContainer") ||
+    $("allStudentsProgress");
+
+  const summary =
+    $("progressSummary") ||
+    $("individualProgress");
+
+
+  // ----------------------------------------------------------
+  // SELECTED STUDENT
+  // ----------------------------------------------------------
+
+  if (
+    state.selectedStudentId &&
+    summary
+  ) {
+
+    const student =
+      state.users.find(
+        user =>
+          (user.uid || user.id) ===
+          state.selectedStudentId
+      );
+
+    if (student) {
+
+      const progress =
+        calculateStudentProgress(
+          state.selectedStudentId
+        );
+
+      summary.innerHTML = `
+        <div class="progress-detail-card">
+
+          <div class="progress-detail-header">
+
+            <div class="user-avatar">
+              ${escapeHTML(
+                (student.name || "S")
+                  .charAt(0)
+                  .toUpperCase()
+              )}
+            </div>
+
+            <div>
+              <h3>
+                ${escapeHTML(
+                  student.name || "Student"
+                )}
+              </h3>
+
+              <p>
+                ${escapeHTML(
+                  student.email || ""
+                )}
+              </p>
+            </div>
+
+          </div>
+
+          <div class="progress-stat-grid">
+
+            <div>
+              <strong>
+                ${progress.total}
+              </strong>
+              <span>Total</span>
+            </div>
+
+            <div>
+              <strong>
+                ${progress.completed}
+              </strong>
+              <span>Completed</span>
+            </div>
+
+            <div>
+              <strong>
+                ${progress.inProgress}
+              </strong>
+              <span>Active</span>
+            </div>
+
+            <div>
+              <strong>
+                ${progress.pending}
+              </strong>
+              <span>Pending</span>
+            </div>
+
+          </div>
+
+          <div class="progress-bar">
+
+            <div
+              class="progress-fill"
+              style="width:${progress.percentage}%"
+            ></div>
+
+          </div>
+
+          <div class="progress-percent">
+            ${progress.percentage}% completed
+          </div>
+
+        </div>
+      `;
+
+    }
+  }
+
+
+  // ----------------------------------------------------------
+  // ALL STUDENTS
+  // ----------------------------------------------------------
+
+  if (!container) return;
+
+  if (
+    state.profile?.role !== "admin" &&
+    state.profile?.role !== "superadmin"
+  ) {
+
+    if (!state.selectedStudentId) {
+
+      container.innerHTML =
+        buildStudentOwnProgress();
+    }
+
+    return;
+  }
+
+
+  if (!state.users.length) {
+
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>No students found.</p>
+      </div>
+    `;
+
+    return;
+  }
+
+
+  container.innerHTML =
+    state.users.map(student => {
+
+      const id =
+        student.uid ||
+        student.id;
+
+      const progress =
+        calculateStudentProgress(id);
+
+      return `
+        <div
+          class="student-progress-card"
+          data-progress-student="${escapeHTML(id)}"
+        >
+
+          <div class="progress-student-header">
+
+            <div class="user-avatar">
+              ${escapeHTML(
+                (student.name || "S")
+                  .charAt(0)
+                  .toUpperCase()
+              )}
+            </div>
+
+            <div>
+              <h3>
+                ${escapeHTML(
+                  student.name || "Student"
+                )}
+              </h3>
+
+              <p>
+                ${escapeHTML(
+                  student.email || ""
+                )}
+              </p>
+            </div>
+
+          </div>
+
+          <div class="progress-info">
+
+            <div class="progress-top">
+              <span>
+                ${progress.completed}
+                /
+                ${progress.total}
+                completed
+              </span>
+
+              <strong>
+                ${progress.percentage}%
+              </strong>
+            </div>
+
+            <div class="progress-bar">
+
+              <div
+                class="progress-fill"
+                style="width:${progress.percentage}%"
+              ></div>
+
+            </div>
+
+          </div>
+
+        </div>
+      `;
+    }).join("");
+
+
+  container
+    .querySelectorAll(
+      "[data-progress-student]"
+    )
+    .forEach(card => {
+
+      card.addEventListener(
+        "click",
+        () => {
+
+          state.selectedStudentId =
+            card.dataset.progressStudent;
+
+          renderProgress();
+        }
+      );
+    });
+}
+
+
+function buildStudentOwnProgress() {
+
+  const progress =
+    calculateStudentProgress(
+      state.user.uid
+    );
+
+  return `
+    <div class="progress-detail-card">
+
+      <h3>My Progress</h3>
+
+      <div class="progress-stat-grid">
+
+        <div>
+          <strong>
+            ${progress.total}
+          </strong>
+          <span>Total</span>
+        </div>
+
+        <div>
+          <strong>
+            ${progress.completed}
+          </strong>
+          <span>Completed</span>
+        </div>
+
+        <div>
+          <strong>
+            ${progress.inProgress}
+          </strong>
+          <span>Active</span>
+        </div>
+
+        <div>
+          <strong>
+            ${progress.pending}
+          </strong>
+          <span>Pending</span>
+        </div>
+
+      </div>
+
+      <div class="progress-bar">
+
+        <div
+          class="progress-fill"
+          style="width:${progress.percentage}%"
+        ></div>
+
+      </div>
+
+      <div class="progress-percent">
+        ${progress.percentage}% completed
+      </div>
+
+    </div>
+  `;
+}
+
+
+// ============================================================
+// SUPER ADMIN MONITORING
+// ============================================================
+
+async function renderSuperAdminUsers() {
+
+  if (
+    state.profile?.role !== "superadmin"
+  ) {
+    return;
+  }
+
+  try {
+
+    const snapshot =
+      await getDocs(
+        query(
+          collection(db, "users"),
+          where("role", "==", "admin")
+        )
+      );
+
+    const admins =
+      snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+
+    const container =
+      $("superAdminUsers");
+
+    if (!container) return;
+
+    if (!admins.length) {
+
+      container.innerHTML = `
+        <div class="empty-state">
+          <p>No administrators found.</p>
+        </div>
+      `;
+
+      return;
+    }
+
+    container.innerHTML =
+      admins.map(admin => {
+
+        const adminTasks =
+          state.tasks.filter(
+            task =>
+              task.assignedBy === admin.uid
+          );
+
+        const studentIds =
+          [
+            ...new Set(
+              adminTasks.map(
+                task =>
+                  task.assignedTo
+              )
+            )
+          ];
+
+        return `
+          <div class="admin-monitor-card">
+
+            <h3>
+              ${escapeHTML(
+                admin.name || "Admin"
+              )}
+            </h3>
+
+            <p>
+              ${escapeHTML(
+                admin.email || ""
+              )}
+            </p>
+
+            <small>
+              Created:
+              ${escapeHTML(
+                formatDateTime(
+                  admin.createdAt
+                )
+              )}
+            </small>
+
+            <div>
+              Students:
+              ${studentIds.length}
+            </div>
+
+            <div>
+              Tasks:
+              ${adminTasks.length}
+            </div>
+
+          </div>
+        `;
+      }).join("");
+
+  } catch (error) {
+
+    console.error(
+      "renderSuperAdminUsers:",
+      error
+    );
+  }
+}
+
+
+// ============================================================
+// START APPLICATION
+// ============================================================
+
+async function startApplication() {
+
+  if (!state.user) return;
+
+  try {
+
+    state.loading = true;
+
+    await loadProfile();
+
+    updateUserUI();
+
+    // Hide auth screen
+
+    const authScreen =
+      $("authScreen");
+
+    const mainApp =
+      $("mainApp");
+
+    if (authScreen) {
+      authScreen.style.display =
+        "none";
+    }
+
+    if (mainApp) {
+      mainApp.style.display =
+        "";
+    }
+
+
+    // --------------------------------------------------------
+    // ROLE BASED NAVIGATION
+    // --------------------------------------------------------
+
+    const role =
+      state.profile?.role;
+
+    const usersNav =
+      $("usersNavItem");
+
+    const progressNav =
+      $("progressNavItem");
+
+    if (usersNav) {
+      usersNav.style.display =
+        role === "admin" ||
+        role === "superadmin"
+          ? ""
+          : "none";
+    }
+
+    if (progressNav) {
+      progressNav.style.display =
+        role === "admin" ||
+        role === "superadmin"
+          ? ""
+          : "";
+    }
+
+
+    // --------------------------------------------------------
+    // LOAD DATA
+    // --------------------------------------------------------
+
+    await loadUsers();
+
+    await loadTasks();
+
+    await renderSuperAdminUsers();
+
+    showPage("dashboard");
+
+  } catch (error) {
+
+    console.error(
+      "startApplication:",
+      error
+    );
+
+    showToast(
+      firebaseError(error),
+      "error"
     );
 
   } finally {
 
-    if (button) {
-
-      button.disabled =
-        false;
-
-      button.textContent =
-        "Assign Task";
-
-    }
-
+    state.loading = false;
   }
-
 }
 
 
 // ============================================================
-// TASK FILTERS
+// AUTH SCREEN
+// ============================================================
+
+function showLoggedOutScreen() {
+
+  const authScreen =
+    $("authScreen");
+
+  const mainApp =
+    $("mainApp");
+
+  if (authScreen) {
+    authScreen.style.display =
+      "";
+  }
+
+  if (mainApp) {
+    mainApp.style.display =
+      "none";
+  }
+
+  showLoginPanel();
+}
+
+
+// ============================================================
+// MODALS
+// ============================================================
+
+function setupModals() {
+
+  const addUserBtn =
+    $("addUserBtn");
+
+  if (addUserBtn) {
+
+    addUserBtn.addEventListener(
+      "click",
+      () => {
+
+        if (
+          state.profile?.role !== "admin" &&
+          state.profile?.role !== "superadmin"
+        ) {
+          showToast(
+            "You do not have permission.",
+            "error"
+          );
+
+          return;
+        }
+
+        openModal("userModal");
+      }
+    );
+  }
+
+
+  const addTaskBtn =
+    $("addTaskBtn");
+
+  if (addTaskBtn) {
+
+    addTaskBtn.addEventListener(
+      "click",
+      () => {
+
+        if (
+          state.profile?.role !== "admin" &&
+          state.profile?.role !== "superadmin"
+        ) {
+          showToast(
+            "You do not have permission.",
+            "error"
+          );
+
+          return;
+        }
+
+        populateTaskUsers();
+
+        openModal("taskModal");
+      }
+    );
+  }
+
+
+  // Close buttons
+
+  document
+    .querySelectorAll(
+      "[data-close-modal], .modal-close, .close-modal"
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          const modal =
+            button.closest(".modal");
+
+          if (modal) {
+            modal.classList.remove("show");
+            modal.style.display = "";
+          }
+        }
+      );
+    });
+
+
+  // Click outside modal
+
+  document
+    .querySelectorAll(".modal")
+    .forEach(modal => {
+
+      modal.addEventListener(
+        "click",
+        event => {
+
+          if (
+            event.target === modal
+          ) {
+            modal.classList.remove(
+              "show"
+            );
+
+            modal.style.display =
+              "";
+          }
+        }
+      );
+    });
+}
+
+
+// ============================================================
+// SEARCH / FILTER
 // ============================================================
 
 function setupTaskFilters() {
 
-  $("taskSearch")
-    ?.addEventListener(
+  const search =
+    $("taskSearch");
+
+  if (search) {
+
+    search.addEventListener(
       "input",
-      renderTasks
+      () => {
+        renderTasks();
+      }
     );
+  }
 
-  $("taskStatusFilter")
-    ?.addEventListener(
+  const filter =
+    $("taskStatusFilter");
+
+  if (filter) {
+
+    filter.addEventListener(
       "change",
-      renderTasks
+      () => {
+        renderTasks();
+      }
+    );
+  }
+}
+
+
+// ============================================================
+// AUTH UI EVENTS
+// ============================================================
+
+function setupAuthEvents() {
+
+  const loginForm =
+    $("loginForm");
+
+  if (loginForm) {
+    loginForm.addEventListener(
+      "submit",
+      loginUser
+    );
+  }
+
+
+  const registerForm =
+    $("registerForm");
+
+  if (registerForm) {
+    registerForm.addEventListener(
+      "submit",
+      registerAdmin
+    );
+  }
+
+
+  // Common buttons for switching auth panels
+
+  document
+    .querySelectorAll(
+      "[data-show-register], #showRegister"
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        event => {
+
+          event.preventDefault();
+
+          showRegisterPanel();
+        }
+      );
+    });
+
+
+  document
+    .querySelectorAll(
+      "[data-show-login], #showLogin"
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        event => {
+
+          event.preventDefault();
+
+          showLoginPanel();
+        }
+      );
+    });
+
+
+  // Logout buttons
+
+  document
+    .querySelectorAll(
+      "[data-logout], #logoutBtn, #logoutButton"
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        event => {
+
+          event.preventDefault();
+
+          logoutUser();
+        }
+      );
+    });
+}
+
+
+// ============================================================
+// FORMS
+// ============================================================
+
+function setupForms() {
+
+  const userForm =
+    $("userForm");
+
+  if (userForm) {
+    userForm.addEventListener(
+      "submit",
+      createUser
+    );
+  }
+
+
+  const taskForm =
+    $("taskForm");
+
+  if (taskForm) {
+    taskForm.addEventListener(
+      "submit",
+      createTask
+    );
+  }
+}
+
+
+// ============================================================
+// SIDEBAR MENU
+// ============================================================
+
+function setupSidebar() {
+
+  const menuButtons =
+    document.querySelectorAll(
+      ".menu-toggle, #menuToggle, #hamburgerBtn"
     );
 
+  menuButtons.forEach(button => {
+
+    button.addEventListener(
+      "click",
+      event => {
+
+        event.stopPropagation();
+
+        document.body.classList.toggle(
+          "sidebar-open"
+        );
+
+        const sidebar =
+          document.querySelector(
+            ".sidebar"
+          );
+
+        if (sidebar) {
+          sidebar.classList.toggle(
+            "open"
+          );
+        }
+      }
+    );
+  });
+
+
+  document.addEventListener(
+    "click",
+    event => {
+
+      const sidebar =
+        document.querySelector(
+          ".sidebar"
+        );
+
+      if (!sidebar) return;
+
+      const clickedInside =
+        sidebar.contains(event.target);
+
+      const clickedMenu =
+        event.target.closest(
+          ".menu-toggle, #menuToggle, #hamburgerBtn"
+        );
+
+      if (
+        !clickedInside &&
+        !clickedMenu
+      ) {
+        closeSidebarMobile();
+      }
+    }
+  );
 }
 
 
 // ============================================================
-// MOBILE SIDEBAR
+// PROFILE / AVATAR
 // ============================================================
 
-function openMobileSidebar() {
+function updateAvatar() {
 
-  $("sidebar")
-    ?.classList
-    .add("open");
+  const name =
+    state.profile?.name ||
+    state.user?.displayName ||
+    state.user?.email ||
+    "U";
 
-  $("sidebarOverlay")
-    ?.classList
-    .remove("hidden");
+  const letter =
+    name.charAt(0).toUpperCase();
 
+  [
+    "sidebarAvatar",
+    "profileAvatar"
+  ].forEach(id => {
+
+    const el = $(id);
+
+    if (el) {
+      el.textContent =
+        letter;
+    }
+  });
 }
 
 
-function closeMobileSidebar() {
-
-  $("sidebar")
-    ?.classList
-    .remove("open");
-
-  $("sidebarOverlay")
-    ?.classList
-    .add("hidden");
-
-}
-
-
 // ============================================================
-// EVENTS
+// GLOBAL EVENT SETUP
 // ============================================================
 
 function setupEvents() {
 
-  $("loginForm")
-    ?.addEventListener(
-      "submit",
-      loginUser
-    );
+  setupNavigation();
 
+  setupAuthEvents();
 
-  $("registerForm")
-    ?.addEventListener(
-      "submit",
-      registerAdmin
-    );
+  setupForms();
 
-
-  $("showRegisterBtn")
-    ?.addEventListener(
-      "click",
-      showRegister
-    );
-
-
-  $("showLoginBtn")
-    ?.addEventListener(
-      "click",
-      showLogin
-    );
-
-
-  setupPasswordToggles();
-
-
-  // ----------------------------------------------------------
-  // NAVIGATION
-  // ----------------------------------------------------------
-
-  document
-    .querySelectorAll(
-      ".nav-item"
-    )
-    .forEach(
-      item => {
-
-        item.addEventListener(
-          "click",
-          () => {
-
-            const page =
-              item.dataset.page;
-
-            if (page) {
-
-              showPage(
-                page
-              );
-
-            }
-
-          }
-        );
-
-      }
-    );
-
-
-  // ----------------------------------------------------------
-  // PAGE TARGET BUTTONS
-  // ----------------------------------------------------------
-
-  document
-    .querySelectorAll(
-      "[data-page-target]"
-    )
-    .forEach(
-      button => {
-
-        button.addEventListener(
-          "click",
-          () => {
-
-            showPage(
-              button.dataset.pageTarget
-            );
-
-          }
-        );
-
-      }
-    );
-
-
-  // ----------------------------------------------------------
-  // LOGOUT
-  // ----------------------------------------------------------
-
-  $("logoutBtn")
-    ?.addEventListener(
-      "click",
-      async () => {
-
-        try {
-
-          await signOut(
-            auth
-          );
-
-          toast(
-            "Logged out successfully."
-          );
-
-        } catch (error) {
-
-          console.error(
-            error
-          );
-
-        }
-
-      }
-    );
-
-
-  // ----------------------------------------------------------
-  // ADD USER
-  // ----------------------------------------------------------
-
-  $("addUserBtn")
-    ?.addEventListener(
-      "click",
-      openUserModal
-    );
-
-
-  // ----------------------------------------------------------
-  // ADD TASK
-  // ----------------------------------------------------------
-
-  $("addTaskBtn")
-    ?.addEventListener(
-      "click",
-      openTaskModal
-    );
-
-
-  // ----------------------------------------------------------
-  // USER FORM
-  // ----------------------------------------------------------
-
-  $("userForm")
-    ?.addEventListener(
-      "submit",
-      createUser
-    );
-
-
-  // ----------------------------------------------------------
-  // TASK FORM
-  // ----------------------------------------------------------
-
-  $("taskForm")
-    ?.addEventListener(
-      "submit",
-      createTask
-    );
-
-
-  // ----------------------------------------------------------
-  // MODAL CLOSE BUTTONS
-  // ----------------------------------------------------------
-
-  document
-    .querySelectorAll(
-      "[data-close-modal]"
-    )
-    .forEach(
-      button => {
-
-        button.addEventListener(
-          "click",
-          () => {
-
-            const modalId =
-              button.dataset.closeModal;
-
-            hide(
-              modalId
-            );
-
-          }
-        );
-
-      }
-    );
-
-
-  // ----------------------------------------------------------
-  // MODAL BACKDROP
-  // ----------------------------------------------------------
-
-  document
-    .querySelectorAll(
-      ".modal-backdrop"
-    )
-    .forEach(
-      backdrop => {
-
-        backdrop.addEventListener(
-          "click",
-          () => {
-
-            const modal =
-              backdrop.closest(
-                ".modal"
-              );
-
-            modal?.classList.add(
-              "hidden"
-            );
-
-          }
-        );
-
-      }
-    );
-
-
-  // ----------------------------------------------------------
-  // MOBILE MENU
-  // ----------------------------------------------------------
-
-  $("mobileMenuBtn")
-    ?.addEventListener(
-      "click",
-      openMobileSidebar
-    );
-
-
-  $("sidebarOverlay")
-    ?.addEventListener(
-      "click",
-      closeMobileSidebar
-    );
-
+  setupModals();
 
   setupTaskFilters();
 
+  setupSidebar();
 
-  // ----------------------------------------------------------
-  // TASK ACTIONS
-  // ----------------------------------------------------------
-
-  document.addEventListener(
-    "click",
-    async event => {
-
-      const button =
-        event.target.closest(
-          "[data-task-action]"
-        );
-
-      if (!button) {
-        return;
-      }
-
-      const action =
-        button.dataset.taskAction;
-
-      const taskId =
-        button.dataset.taskId;
-
-      if (!taskId) {
-        return;
-      }
-
-      if (
-        action === "accept"
-      ) {
-
-        await acceptTask(
-          taskId
-        );
-
-      }
-
-      if (
-        action === "start"
-      ) {
-
-        await startTask(
-          taskId
-        );
-
-      }
-
-      if (
-        action === "complete"
-      ) {
-
-        await completeTask(
-          taskId
-        );
-
-      }
-
-    }
-  );
-
-
-  // ----------------------------------------------------------
-  // STUDENT PROGRESS
-  // IMPORTANT:
-  // showPage() is called BEFORE selectedStudentId is set.
-  // This prevents the selected ID from being reset.
-  // ----------------------------------------------------------
-
-  document.addEventListener(
-    "click",
-    event => {
-
-      const card =
-        event.target.closest(
-          "[data-user-progress]"
-        );
-
-      if (!card) {
-        return;
-      }
-
-      const studentId =
-        card.dataset.userProgress;
-
-      if (!studentId) {
-        return;
-      }
-
-      const student =
-        state.users.find(
-          user =>
-            (
-              user.uid ||
-              user.id
-            ) ===
-            studentId
-        );
-
-      if (
-        !student ||
-        student.role !==
-          "student"
-      ) {
-
-        return;
-      }
-
-      if (
-        state.currentPage !==
-        "progress"
-      ) {
-
-        showPage(
-          "progress"
-        );
-
-      }
-
-      state.selectedStudentId =
-        studentId;
-
-      renderProgress();
-
-    }
-  );
-
-
-  // ----------------------------------------------------------
-  // CLOSE INDIVIDUAL PROGRESS
-  // ----------------------------------------------------------
-
-  document.addEventListener(
-    "click",
-    event => {
-
-      const button =
-        event.target.closest(
-          "[data-close-student-progress]"
-        );
-
-      if (!button) {
-        return;
-      }
-
-      state.selectedStudentId =
-        null;
-
-      renderProgress();
-
-    }
-  );
-
+  updateAvatar();
 }
 
 
 // ============================================================
-// AUTH STATE
+// AUTH STATE LISTENER
 // ============================================================
 
 onAuthStateChanged(
   auth,
-  async firebaseUser => {
+  async user => {
 
-    try {
+    state.user = user;
 
-      if (firebaseUser) {
+    if (!user) {
 
-        await startApplication(
-          firebaseUser
-        );
+      state.profile = null;
+      state.users = [];
+      state.tasks = [];
 
-      } else {
+      showLoggedOutScreen();
 
-        show(
-          "authScreen"
-        );
-
-        hide(
-          "mainApp"
-        );
-
-        state.user =
-          null;
-
-        state.profile =
-          null;
-
-        state.users =
-          [];
-
-        state.tasks =
-          [];
-
-      }
-
-    } catch (error) {
-
-      console.error(
-        "Application start error:",
-        error
-      );
-
-      show(
-        "authScreen"
-      );
-
-      hide(
-        "mainApp"
-      );
-
-    } finally {
-
-      hideLoader();
-
+      return;
     }
 
+    await startApplication();
+
+    updateAvatar();
   }
 );
 
 
 // ============================================================
-// START
+// INITIALIZE
 // ============================================================
 
-setupEvents();
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+
+    setupEvents();
+
+    // Set version anywhere it exists
+
+    document
+      .querySelectorAll(
+        "#appVersion, [data-app-version]"
+      )
+      .forEach(el => {
+
+        el.textContent =
+          `Task Manager ${VERSION}`;
+      });
+  }
+);
+
+
+// ============================================================
+// GLOBAL DEBUG ACCESS
+// ============================================================
+
+window.TaskManager = {
+  state,
+  version: VERSION,
+
+  reload: async () => {
+    await loadUsers();
+    await loadTasks();
+    updateDashboard();
+  },
+
+  logout: logoutUser
+};
